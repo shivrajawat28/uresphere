@@ -1,0 +1,683 @@
+"use server"
+
+import { revalidatePath } from "next/cache"
+import { del } from "@vercel/blob"
+import { createClient } from "@/lib/supabase/server"
+import { requireAdmin, requireMember, type CurrentMember } from "@/lib/data/session"
+import { scopeCovers, type ScopeFilter } from "@/lib/validation"
+
+type ActionResult = { error: string | null }
+
+async function logAudit(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  adminId: string,
+  sphereId: string | null,
+  action: string,
+  entityType?: string,
+  entityId?: string,
+  details: Record<string, unknown> = {},
+) {
+  try {
+    await supabase.from("audit_logs").insert({
+      admin_id: adminId,
+      sphere_id: sphereId,
+      action,
+      entity_type: entityType,
+      entity_id: entityId ? String(entityId) : null,
+      details,
+    })
+  } catch {
+    // Auditing must never break the primary action.
+  }
+}
+
+type Gate = { ok: true; member: CurrentMember } | { ok: false; error: string }
+
+/**
+ * Server-side authorization gate for a sphere-scoped admin action.
+ * The caller must be able to administer `sphereId` AND (when a permission is
+ * given) hold that permission there:
+ * - super_admin → any Sphere, any permission;
+ * - Sphere admin (profile role, active member of the Sphere) → full Sphere;
+ * - `sphere_admin` role assignment → full Sphere;
+ * - scoped manager → only if their assignment grants `permission`, and the
+ *   optional `scope` (degree/year/branch) is inside their assigned scope.
+ */
+export async function requireSphereAction(
+  sphereId: string,
+  permission?: string,
+  scope?: ScopeFilter,
+): Promise<Gate> {
+  const member = await requireMember()
+  if (member.role === "super_admin") return { ok: true, member }
+
+  const supabase = await createClient()
+
+  if (member.role === "admin") {
+    const { data: membership } = await supabase
+      .from("user_spheres")
+      .select("user_id")
+      .eq("user_id", member.userId)
+      .eq("sphere_id", sphereId)
+      .eq("membership_status", "active")
+      .maybeSingle()
+    if (membership) return { ok: true, member }
+  }
+
+  const { data: assignment } = await supabase
+    .from("role_assignments")
+    .select("role, scope")
+    .eq("user_id", member.userId)
+    .eq("sphere_id", sphereId)
+    .maybeSingle()
+  if (!assignment) return { ok: false, error: "You don't have access to that Sphere." }
+
+  if (assignment.role === "sphere_admin") return { ok: true, member }
+  if (!permission) return { ok: false, error: "You don't have permission to do that." }
+
+  const perms: string[] = Array.isArray(assignment.scope?.permissions)
+    ? (assignment.scope.permissions as string[])
+    : []
+  if (!perms.includes(permission)) return { ok: false, error: "You don't have permission to do that." }
+
+  if (scope && !scopeCovers(assignment.scope as ScopeFilter | undefined, scope)) {
+    return { ok: false, error: "This is outside your assigned scope." }
+  }
+  return { ok: true, member }
+}
+
+function spherePaths(sphereId: string): string[] {
+  return ["/admin", `/admin/spheres/${sphereId}`]
+}
+
+// ---------------------------------------------------------------------------
+// User management (administrators only)
+// ---------------------------------------------------------------------------
+
+export async function setUserStatusAction(userId: string, status: "active" | "suspended"): Promise<ActionResult> {
+  const admin = await requireAdmin()
+  const supabase = await createClient()
+
+  if (userId === admin.userId) return { error: "You can't change your own status." }
+
+  const { data: target } = await supabase
+    .from("user_spheres")
+    .select("user_id, sphere_id")
+    .eq("user_id", userId)
+    .eq("membership_status", "active")
+    .maybeSingle()
+  if (!target) return { error: "No member found." }
+
+  // Only administrators (super / sphere admin / sphere_admin assignment) may
+  // suspend members; scoped managers never receive users.manage.
+  const gate = await requireSphereAction(target.sphere_id, "users.manage")
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("profiles").update({ account_status: status }).eq("id", userId)
+  if (error) return { error: "Couldn't update the member." }
+
+  await logAudit(supabase, gate.member.userId, target.sphere_id, `user_${status}`, "user", userId, { status })
+  for (const p of spherePaths(target.sphere_id)) revalidatePath(p)
+  return { error: null }
+}
+
+// ---------------------------------------------------------------------------
+// Moderation — reports (Social)
+// ---------------------------------------------------------------------------
+
+export async function resolveReportAction(
+  reportId: string,
+  resolution: "resolved" | "rejected",
+  note: string,
+): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const { data: report } = await supabase.from("reports").select("id, sphere_id").eq("id", reportId).maybeSingle()
+  if (!report) return { error: "Report not found." }
+
+  const gate = await requireSphereAction(report.sphere_id, "social.moderate")
+  if (!gate.ok) return gate
+
+  const { error } = await supabase
+    .from("reports")
+    .update({
+      status: resolution,
+      resolution: note.trim().slice(0, 500) || null,
+      resolved_by: gate.member.userId,
+      resolved_at: new Date().toISOString(),
+    })
+    .eq("id", reportId)
+  if (error) return { error: "Couldn't update the report." }
+
+  await logAudit(supabase, gate.member.userId, report.sphere_id, `report_${resolution}`, "report", reportId, { note })
+  for (const p of spherePaths(report.sphere_id)) revalidatePath(p)
+  return { error: null }
+}
+
+// ---------------------------------------------------------------------------
+// Promotions (promotion_moderator)
+// ---------------------------------------------------------------------------
+
+export async function reviewPromotionAction(promotionId: string, status: "approved" | "rejected"): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const { data: promo } = await supabase
+    .from("promotions")
+    .select("id, sphere_id, fee_status")
+    .eq("id", promotionId)
+    .maybeSingle()
+  if (!promo) return { error: "Promotion not found." }
+
+  const gate = await requireSphereAction(promo.sphere_id, "promotions.approve")
+  if (!gate.ok) return gate
+
+  // Approving also settles payment verification when the user submitted a UTR.
+  const update: Record<string, string | null> = {
+    status,
+    reviewed_by: gate.member.userId,
+    reviewed_at: new Date().toISOString(),
+  }
+  if (status === "approved" && promo.fee_status === "payment_pending") update.fee_status = "paid"
+  if (status === "rejected") update.fee_status = promo.fee_status === "payment_pending" ? "due" : promo.fee_status
+
+  const { error } = await supabase.from("promotions").update(update).eq("id", promotionId)
+  if (error) return { error: "Couldn't review the promotion." }
+
+  await logAudit(supabase, gate.member.userId, promo.sphere_id, `promotion_${status}`, "promotion", promotionId)
+  for (const p of spherePaths(promo.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/promotions")
+  return { error: null }
+}
+
+// ---------------------------------------------------------------------------
+// Marketplace moderation — listings (listing_manager)
+// ---------------------------------------------------------------------------
+
+export async function removeListingAction(listingId: string, imageUrls: string[]): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const { data: listing } = await supabase
+    .from("marketplace_listings")
+    .select("id, sphere_id")
+    .eq("id", listingId)
+    .maybeSingle()
+  if (!listing) return { error: "Listing not found." }
+
+  const gate = await requireSphereAction(listing.sphere_id, "listings.delete")
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("marketplace_listings").delete().eq("id", listingId)
+  if (error) return { error: "Couldn't remove the listing." }
+
+  if (imageUrls.length > 0) {
+    try {
+      await del(imageUrls)
+    } catch {
+      // Orphaned blob is acceptable; the listing itself is gone.
+    }
+  }
+
+  await logAudit(supabase, gate.member.userId, listing.sphere_id, "listing_removed", "listing", listingId)
+  for (const p of spherePaths(listing.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/marketplace")
+  return { error: null }
+}
+
+// ---------------------------------------------------------------------------
+// Global listings (super admin only — platform level)
+// ---------------------------------------------------------------------------
+
+const GLOBAL_CATEGORIES = ["hostel", "pg", "cafe", "restaurant", "gym", "services", "business", "other"] as const
+
+export async function upsertGlobalListingAction(formData: FormData): Promise<ActionResult> {
+  const admin = await requireAdmin()
+  const supabase = await createClient()
+  if (admin.role !== "super_admin") return { error: "Only platform admins can manage global listings." }
+
+  const id = String(formData.get("id") ?? "")
+  const title = String(formData.get("title") ?? "").trim()
+  const description = String(formData.get("description") ?? "").trim()
+  const category = String(formData.get("category") ?? "other")
+  const priceRaw = String(formData.get("price") ?? "").trim()
+  const address = String(formData.get("address") ?? "").trim()
+  const city = String(formData.get("city") ?? "").trim()
+  const contact = String(formData.get("contact") ?? "").trim()
+  const imageUrlsRaw = String(formData.get("imageUrls") ?? "[]")
+
+  if (title.length < 1 || title.length > 120) return { error: "Title must be 1–120 characters." }
+  if (description.length > 2000) return { error: "Description is too long." }
+  if (!GLOBAL_CATEGORIES.includes(category as (typeof GLOBAL_CATEGORIES)[number])) {
+    return { error: "Invalid category." }
+  }
+
+  let priceCents: number | null = null
+  if (priceRaw) {
+    const p = Number.parseFloat(priceRaw)
+    if (!Number.isFinite(p) || p < 0) return { error: "Enter a valid, non-negative price." }
+    priceCents = Math.round(p * 100)
+  }
+
+  let imageUrls: string[] = []
+  try {
+    const parsed = JSON.parse(imageUrlsRaw)
+    if (Array.isArray(parsed)) imageUrls = parsed.filter((u) => typeof u === "string").slice(0, 6)
+  } catch {
+    imageUrls = []
+  }
+
+  const payload = {
+    title,
+    description,
+    category,
+    price_cents: priceCents,
+    address,
+    city,
+    contact,
+    image_urls: imageUrls,
+    status: "active" as const,
+  }
+
+  if (id) {
+    const { error } = await supabase.from("global_listings").update(payload).eq("id", id)
+    if (error) return { error: "Couldn't update the listing." }
+    await logAudit(supabase, admin.userId, null, "global_listing_updated", "global_listing", id)
+  } else {
+    const { data, error } = await supabase
+      .from("global_listings")
+      .insert({ ...payload, created_by: admin.userId })
+      .select("id")
+      .single()
+    if (error || !data) return { error: "Couldn't create the listing." }
+    await logAudit(supabase, admin.userId, null, "global_listing_created", "global_listing", data.id)
+  }
+
+  revalidatePath("/admin")
+  revalidatePath("/dashboard/global-listings")
+  return { error: null }
+}
+
+export async function deleteGlobalListingAction(listingId: string, imageUrls: string[]): Promise<ActionResult> {
+  const admin = await requireAdmin()
+  const supabase = await createClient()
+  if (admin.role !== "super_admin") return { error: "Only platform admins can manage global listings." }
+
+  const { error } = await supabase.from("global_listings").delete().eq("id", listingId)
+  if (error) return { error: "Couldn't delete the listing." }
+
+  if (imageUrls.length > 0) {
+    try {
+      await del(imageUrls)
+    } catch {
+      // ignore
+    }
+  }
+
+  await logAudit(supabase, admin.userId, null, "global_listing_deleted", "global_listing", listingId)
+  revalidatePath("/admin")
+  revalidatePath("/dashboard/global-listings")
+  return { error: null }
+}
+
+// ---------------------------------------------------------------------------
+// Events (event_manager)
+// ---------------------------------------------------------------------------
+
+export async function createEventAction(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  const sphereId = String(formData.get("sphereId") ?? "")
+
+  const title = String(formData.get("title") ?? "").trim()
+  const description = String(formData.get("description") ?? "").trim()
+  const date = String(formData.get("date") ?? "")
+  const time = String(formData.get("time") ?? "") || null
+  const venue = String(formData.get("venue") ?? "").trim()
+  const organizer = String(formData.get("organizer") ?? "").trim()
+  const imageUrl = String(formData.get("imageUrl") ?? "").trim() || null
+
+  if (!sphereId) return { error: "Missing Sphere." }
+  if (title.length < 1 || title.length > 120) return { error: "Title must be 1–120 characters." }
+  if (!date) return { error: "Pick a date." }
+
+  const gate = await requireSphereAction(sphereId, "events.create")
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("events").insert({
+    sphere_id: sphereId,
+    title,
+    description,
+    event_date: date,
+    event_time: time,
+    venue,
+    organizer,
+    image_url: imageUrl,
+    created_by: gate.member.userId,
+  })
+  if (error) return { error: "Couldn't create the event." }
+
+  await logAudit(supabase, gate.member.userId, sphereId, "event_created", "event")
+  for (const p of spherePaths(sphereId)) revalidatePath(p)
+  revalidatePath("/dashboard/events")
+  return { error: null }
+}
+
+export async function deleteEventAction(eventId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const { data: event } = await supabase.from("events").select("id, sphere_id").eq("id", eventId).maybeSingle()
+  if (!event) return { error: "Event not found." }
+
+  const gate = await requireSphereAction(event.sphere_id, "events.delete")
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("events").delete().eq("id", eventId)
+  if (error) return { error: "Couldn't delete the event." }
+
+  await logAudit(supabase, gate.member.userId, event.sphere_id, "event_deleted", "event", eventId)
+  for (const p of spherePaths(event.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/events")
+  return { error: null }
+}
+
+// ---------------------------------------------------------------------------
+// Clubs (club_manager)
+// ---------------------------------------------------------------------------
+
+export async function createClubAction(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  const sphereId = String(formData.get("sphereId") ?? "")
+
+  const name = String(formData.get("name") ?? "").trim()
+  const description = String(formData.get("description") ?? "").trim()
+  const imageUrl = String(formData.get("imageUrl") ?? "").trim() || null
+
+  if (!sphereId) return { error: "Missing Sphere." }
+  if (name.length < 1 || name.length > 120) return { error: "Club name must be 1–120 characters." }
+
+  const gate = await requireSphereAction(sphereId, "clubs.create")
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("clubs").insert({
+    sphere_id: sphereId,
+    name,
+    description,
+    president_id: null,
+    logo_url: imageUrl,
+    created_by: gate.member.userId,
+  })
+  if (error) return { error: "Couldn't create the club." }
+
+  await logAudit(supabase, gate.member.userId, sphereId, "club_created", "club")
+  for (const p of spherePaths(sphereId)) revalidatePath(p)
+  revalidatePath("/dashboard/clubs")
+  return { error: null }
+}
+
+export async function deleteClubAction(clubId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const { data: club } = await supabase.from("clubs").select("id, sphere_id").eq("id", clubId).maybeSingle()
+  if (!club) return { error: "Club not found." }
+
+  const gate = await requireSphereAction(club.sphere_id, "clubs.delete")
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("clubs").delete().eq("id", clubId)
+  if (error) return { error: "Couldn't delete the club." }
+
+  await logAudit(supabase, gate.member.userId, club.sphere_id, "club_deleted", "club", clubId)
+  for (const p of spherePaths(club.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/clubs")
+  return { error: null }
+}
+
+// ---------------------------------------------------------------------------
+// Academic (academic_manager, degree/year/branch scoped)
+// ---------------------------------------------------------------------------
+
+export async function createSubjectAction(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  const sphereId = String(formData.get("sphereId") ?? "")
+
+  const name = String(formData.get("name") ?? "").trim()
+  const code = String(formData.get("code") ?? "").trim()
+  const degree = String(formData.get("degree") ?? "").trim()
+  const year = String(formData.get("year") ?? "").trim()
+  const branch = String(formData.get("branch") ?? "").trim()
+  if (!sphereId) return { error: "Missing Sphere." }
+  if (name.length < 1) return { error: "Subject name is required." }
+
+  const gate = await requireSphereAction(sphereId, "academic.create", { degree, year, branch })
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("subjects").insert({
+    sphere_id: sphereId,
+    name,
+    code,
+    degree,
+    year,
+    branch,
+    created_by: gate.member.userId,
+  })
+  if (error) return { error: "Couldn't create the subject." }
+
+  await logAudit(supabase, gate.member.userId, sphereId, "subject_created", "subject", undefined, { degree, year, branch })
+  for (const p of spherePaths(sphereId)) revalidatePath(p)
+  revalidatePath("/dashboard/academic")
+  return { error: null }
+}
+
+export async function createUnitAction(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const subjectId = String(formData.get("subjectId") ?? "")
+  const name = String(formData.get("name") ?? "").trim()
+  if (!subjectId || name.length < 1) return { error: "Unit name and subject are required." }
+
+  const { data: subject } = await supabase
+    .from("subjects")
+    .select("id, sphere_id, degree, year, branch")
+    .eq("id", subjectId)
+    .maybeSingle()
+  if (!subject) return { error: "Subject not found." }
+
+  const gate = await requireSphereAction(subject.sphere_id, "academic.create", {
+    degree: subject.degree,
+    year: subject.year,
+    branch: subject.branch,
+  })
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("academic_units").insert({
+    sphere_id: subject.sphere_id,
+    subject_id: subjectId,
+    name,
+  })
+  if (error) return { error: "Couldn't create the unit." }
+
+  await logAudit(supabase, gate.member.userId, subject.sphere_id, "unit_created", "unit")
+  for (const p of spherePaths(subject.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/academic")
+  return { error: null }
+}
+
+export async function deleteUnitAction(unitId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const { data: unit } = await supabase
+    .from("academic_units")
+    .select("id, sphere_id, subject_id")
+    .eq("id", unitId)
+    .maybeSingle()
+  if (!unit) return { error: "Unit not found." }
+
+  const { data: subject } = unit.subject_id
+    ? await supabase.from("subjects").select("id, degree, year, branch").eq("id", unit.subject_id).maybeSingle()
+    : { data: null }
+  const gate = await requireSphereAction(unit.sphere_id, "academic.delete", {
+    degree: subject?.degree,
+    year: subject?.year,
+    branch: subject?.branch,
+  })
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("academic_units").delete().eq("id", unitId)
+  if (error) return { error: "Couldn't delete the unit." }
+
+  await logAudit(supabase, gate.member.userId, unit.sphere_id, "unit_deleted", "unit", unitId)
+  for (const p of spherePaths(unit.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/academic")
+  return { error: null }
+}
+
+export async function deleteSubjectAction(subjectId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const { data: subject } = await supabase
+    .from("subjects")
+    .select("id, sphere_id, degree, year, branch")
+    .eq("id", subjectId)
+    .maybeSingle()
+  if (!subject) return { error: "Subject not found." }
+
+  const gate = await requireSphereAction(subject.sphere_id, "academic.delete", {
+    degree: subject.degree,
+    year: subject.year,
+    branch: subject.branch,
+  })
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("subjects").delete().eq("id", subjectId)
+  if (error) return { error: "Couldn't delete the subject." }
+
+  await logAudit(supabase, gate.member.userId, subject.sphere_id, "subject_deleted", "subject", subjectId)
+  for (const p of spherePaths(subject.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/academic")
+  return { error: null }
+}
+
+export async function uploadResourceAction(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const title = String(formData.get("title") ?? "").trim()
+  const subjectId = String(formData.get("subjectId") ?? "") || null
+  const type = String(formData.get("type") ?? "notes")
+  const url = String(formData.get("url") ?? "").trim()
+
+  if (title.length < 1) return { error: "Resource title is required." }
+  if (!url) return { error: "Resource URL is required." }
+
+  const { data: subject } = subjectId
+    ? await supabase.from("subjects").select("id, sphere_id, degree, year, branch").eq("id", subjectId).maybeSingle()
+    : { data: null }
+  const sphereId = subject?.sphere_id ?? String(formData.get("sphereId") ?? "")
+  if (!sphereId) return { error: "Missing Sphere." }
+
+  const gate = await requireSphereAction(sphereId, "academic.create", {
+    degree: subject?.degree,
+    year: subject?.year,
+    branch: subject?.branch,
+  })
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("academic_resources").insert({
+    sphere_id: sphereId,
+    subject_id: subjectId,
+    title,
+    type,
+    url,
+    uploaded_by: gate.member.userId,
+  })
+  if (error) return { error: "Couldn't upload the resource." }
+
+  await logAudit(supabase, gate.member.userId, sphereId, "resource_uploaded", "resource")
+  for (const p of spherePaths(sphereId)) revalidatePath(p)
+  revalidatePath("/dashboard/academic")
+  return { error: null }
+}
+
+export async function deleteResourceAction(resourceId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const { data: resource } = await supabase
+    .from("academic_resources")
+    .select("id, sphere_id, subject_id")
+    .eq("id", resourceId)
+    .maybeSingle()
+  if (!resource) return { error: "Resource not found." }
+
+  const { data: subject } = resource.subject_id
+    ? await supabase.from("subjects").select("id, degree, year, branch").eq("id", resource.subject_id).maybeSingle()
+    : { data: null }
+  const gate = await requireSphereAction(resource.sphere_id, "academic.delete", {
+    degree: subject?.degree,
+    year: subject?.year,
+    branch: subject?.branch,
+  })
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("academic_resources").delete().eq("id", resourceId)
+  if (error) return { error: "Couldn't delete the resource." }
+
+  await logAudit(supabase, gate.member.userId, resource.sphere_id, "resource_deleted", "resource", resourceId)
+  for (const p of spherePaths(resource.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/academic")
+  return { error: null }
+}
+
+export async function createCalendarEntryAction(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  const sphereId = String(formData.get("sphereId") ?? "")
+
+  const title = String(formData.get("title") ?? "").trim()
+  const date = String(formData.get("date") ?? "")
+  const description = String(formData.get("description") ?? "").trim()
+  if (!sphereId) return { error: "Missing Sphere." }
+  if (title.length < 1 || !date) return { error: "Title and date are required." }
+
+  // Calendar entries are sphere-wide; any academic manager may add one.
+  const gate = await requireSphereAction(sphereId, "academic.create")
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("academic_calendar").insert({
+    sphere_id: sphereId,
+    title,
+    event_date: date,
+    description,
+    created_by: gate.member.userId,
+  })
+  if (error) return { error: "Couldn't add the calendar entry." }
+
+  await logAudit(supabase, gate.member.userId, sphereId, "calendar_entry_created", "calendar")
+  for (const p of spherePaths(sphereId)) revalidatePath(p)
+  revalidatePath("/dashboard/academic")
+  return { error: null }
+}
+
+// ---------------------------------------------------------------------------
+// Chat moderation (social_moderator)
+// ---------------------------------------------------------------------------
+
+export async function adminDeleteChatMessageAction(messageId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const { data: message } = await supabase
+    .from("chat_messages")
+    .select("id, sphere_id")
+    .eq("id", messageId)
+    .maybeSingle()
+  if (!message) return { error: "Message not found." }
+
+  const gate = await requireSphereAction(message.sphere_id, "social.delete_message")
+  if (!gate.ok) return gate
+
+  const { error } = await supabase
+    .from("chat_messages")
+    .update({ is_deleted: true, deleted_by: gate.member.userId })
+    .eq("id", messageId)
+  if (error) return { error: "Couldn't delete the message." }
+
+  await logAudit(supabase, gate.member.userId, message.sphere_id, "message_removed", "chat_message", messageId)
+  for (const p of spherePaths(message.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/chat")
+  return { error: null }
+}

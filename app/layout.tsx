@@ -1,0 +1,78 @@
+import { Analytics } from '@vercel/analytics/next'
+import type { Metadata, Viewport } from 'next'
+import { Fraunces, Geist } from 'next/font/google'
+import { Toaster } from '@/components/ui/sonner'
+import { ThemeProvider } from './theme-provider'
+import './globals.css'
+
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  variable: '--font-serif',
+  weight: ['400', '500', '600'],
+  style: ['normal', 'italic'],
+})
+
+const geist = Geist({
+  subsets: ['latin'],
+  variable: '--font-sans',
+})
+
+export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'),
+  title: {
+    default: 'UreSphere — Your Campus. Your Sphere. Your Community.',
+    template: '%s · UreSphere',
+  },
+  description:
+    'UreSphere is a private, campus-verified community platform. Chat, trade, and organize with people who actually share your college — anonymously.',
+  openGraph: {
+    title: 'UreSphere — Your Campus. Your Sphere. Your Community.',
+    description:
+      'A private community drawn around your campus. Anonymous by design, scoped to your Sphere.',
+    type: 'website',
+    siteName: 'UreSphere',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'UreSphere — Your Campus. Your Sphere. Your Community.',
+    description: 'A private community drawn around your campus. Anonymous by design.',
+  },
+  // Favicon package lives in /public/favicon/ (favicon.ico, favicon.svg,
+  // favicon-96x96.png, apple-touch-icon.png, site.webmanifest).
+  icons: {
+    icon: [
+      { url: '/favicon/favicon.ico', sizes: 'any', type: 'image/x-icon' },
+      { url: '/favicon/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon/favicon-96x96.png', sizes: '96x96', type: 'image/png' },
+    ],
+    apple: '/favicon/apple-touch-icon.png',
+  },
+  manifest: '/favicon/site.webmanifest',
+}
+
+export const viewport: Viewport = {
+  colorScheme: 'light dark',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#fafaf7' },
+    { media: '(prefers-color-scheme: dark)', color: '#10141f' },
+  ],
+  userScalable: true,
+}
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode
+}>) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body className={`antialiased font-sans ${fraunces.variable} ${geist.variable}`}>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+          {children}
+          <Toaster />
+        </ThemeProvider>
+        {process.env.NODE_ENV === 'production' && <Analytics />}
+      </body>
+    </html>
+  )
+}

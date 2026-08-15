@@ -1,0 +1,3 @@
+allowBuilds:
+  msw: false
+  unrs-resolver: false

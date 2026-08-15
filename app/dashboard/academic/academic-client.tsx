@@ -1,0 +1,706 @@
+"use client"
+
+import { useMemo, useState, useTransition } from "react"
+import {
+  createSubjectAction,
+  createUnitAction,
+  uploadResourceAction,
+  deleteResourceAction,
+  createCalendarEntryAction,
+} from "@/lib/actions/admin"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { AdCard } from "@/components/ads/ad-card"
+import type { AdCampaign } from "@/lib/ads"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog"
+import {
+  Search,
+  FileText,
+  Trash2,
+  Plus,
+  CalendarDays,
+  BookOpen,
+  ChevronRight,
+  GraduationCap,
+  Layers,
+} from "lucide-react"
+import { toast } from "sonner"
+
+const TYPE_LABELS: Record<string, string> = {
+  notes: "Notes",
+  handwritten: "Handwritten",
+  syllabus: "Syllabus",
+  paper: "Previous paper",
+  other: "Other",
+}
+
+const DEGREES = ["B.Tech", "BBA", "MBA", "BCA", "MCA", "Other"]
+const YEARS = ["First Year", "Second Year", "Third Year", "Fourth Year"]
+
+type Subject = { id: string; name: string; code: string; degree: string; year: string; branch: string }
+type Unit = { id: string; subject_id: string; name: string }
+type Resource = {
+  id: string
+  title: string
+  type: string
+  url: string
+  subject_id: string | null
+  unit_id: string | null
+  created_at: string
+  subjectName: string
+  unitName: string | null
+}
+type CalendarEntry = { id: string; title: string; event_date: string; description: string }
+
+export function AcademicClient({
+  member,
+  subjects,
+  units,
+  resources,
+  calendar,
+  ads,
+}: {
+  member: { role: string; sphereId: string | null }
+  subjects: Subject[]
+  units: Unit[]
+  resources: Resource[]
+  calendar: CalendarEntry[]
+  ads: AdCampaign[]
+}) {
+  const isAdmin = member.role === "admin" || member.role === "super_admin"
+  const [query, setQuery] = useState("")
+  const [typeFilter, setTypeFilter] = useState("all")
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [subjectOpen, setSubjectOpen] = useState(false)
+  const [unitOpen, setUnitOpen] = useState(false)
+  const [unitSubjectId, setUnitSubjectId] = useState<string>("")
+  const [calendarOpen, setCalendarOpen] = useState(false)
+  const [isPending, startTransition] = useTransition()
+
+  // --- Drill-down state ---
+  const [degree, setDegree] = useState<string>("")
+  const [year, setYear] = useState<string>("")
+  const [branch, setBranch] = useState<string>("")
+  const [subjectId, setSubjectId] = useState<string>("")
+  const [unitId, setUnitId] = useState<string>("")
+
+  const degrees = useMemo(() => Array.from(new Set(subjects.map((s) => s.degree).filter(Boolean))), [subjects])
+  const yearsForDegree = useMemo(
+    () => Array.from(new Set(subjects.filter((s) => s.degree === degree).map((s) => s.year).filter(Boolean))),
+    [subjects, degree],
+  )
+  const branchesForYear = useMemo(
+    () =>
+      Array.from(
+        new Set(subjects.filter((s) => s.degree === degree && s.year === year).map((s) => s.branch).filter(Boolean)),
+      ),
+    [subjects, degree, year],
+  )
+  const subjectsForBranch = useMemo(
+    () => subjects.filter((s) => s.degree === degree && s.year === year && s.branch === branch),
+    [subjects, degree, year, branch],
+  )
+  const selectedSubject = subjectsForBranch.find((s) => s.id === subjectId)
+  const unitsForSubject = useMemo(() => units.filter((u) => u.subject_id === subjectId), [units, subjectId])
+
+  function resetDrill() {
+    setDegree("")
+    setYear("")
+    setBranch("")
+    setSubjectId("")
+    setUnitId("")
+  }
+
+  function pickDegree(d: string) {
+    setDegree(d)
+    setYear("")
+    setBranch("")
+    setSubjectId("")
+    setUnitId("")
+  }
+  function pickYear(y: string) {
+    setYear(y)
+    setBranch("")
+    setSubjectId("")
+    setUnitId("")
+  }
+  function pickBranch(b: string) {
+    setBranch(b)
+    setSubjectId("")
+    setUnitId("")
+  }
+  function pickSubject(id: string) {
+    setSubjectId(id)
+    setUnitId("")
+  }
+
+  const visibleResources = useMemo(() => {
+    return resources.filter((r) => {
+      if (subjectId) {
+        if (r.subject_id !== subjectId) return false
+        if (unitId && r.unit_id !== unitId) return false
+      }
+      const q = query.trim().toLowerCase()
+      const matchesQuery =
+        q.length === 0 || r.title.toLowerCase().includes(q) || r.subjectName.toLowerCase().includes(q)
+      const matchesType = typeFilter === "all" || r.type === typeFilter
+      return matchesQuery && matchesType
+    })
+  }, [resources, query, typeFilter, subjectId, unitId])
+
+  const crumb = [
+    { label: degree || "All degrees", action: () => resetDrill() },
+    ...(year ? [{ label: year, action: () => pickDegree(degree) }] : []),
+    ...(branch ? [{ label: branch, action: () => pickYear(year) }] : []),
+    ...(selectedSubject ? [{ label: selectedSubject.name, action: () => pickBranch(branch) }] : []),
+  ]
+
+  function run(action: () => Promise<{ error: string | null }>, success: string) {
+    startTransition(async () => {
+      const result = await action()
+      if (result.error) toast.error(result.error)
+      else toast.success(success)
+    })
+  }
+
+  return (
+    <div className="mx-auto max-w-5xl px-4 py-8 md:px-8">
+      <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-pretty font-serif text-3xl font-semibold text-foreground">Academic</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Degrees, years, branches, subjects and units for your Sphere — managed by your admins.
+          </p>
+        </div>
+        {isAdmin && (
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setSubjectOpen(true)}>
+              <Plus className="size-3.5" />
+              Subject
+            </Button>
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setCalendarOpen(true)}>
+              <CalendarDays className="size-3.5" />
+              Calendar
+            </Button>
+            <Button size="sm" className="gap-1.5" onClick={() => setUploadOpen(true)}>
+              <Plus className="size-3.5" />
+              Upload resource
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Sponsored banner — Academic placement */}
+      {ads.length > 0 && (
+        <div className="mb-6 space-y-2">
+          {ads.map((ad) => (
+            <AdCard key={ad.id} ad={ad} />
+          ))}
+        </div>
+      )}
+
+      {/* Breadcrumb */}
+      {crumb.length > 0 && (
+        <nav aria-label="Breadcrumb" className="mb-6 flex flex-wrap items-center gap-1 text-sm">
+          {crumb.map((c, i) => (
+            <span key={c.label} className="flex items-center gap-1">
+              {i > 0 && <ChevronRight className="size-3.5 text-muted-foreground/50" />}
+              <button
+                onClick={c.action}
+                className={`transition hover:text-primary ${i === crumb.length - 1 ? "font-medium text-foreground" : "text-muted-foreground"}`}
+              >
+                {c.label}
+              </button>
+            </span>
+          ))}
+        </nav>
+      )}
+
+      {/* Level 1: Degrees */}
+      {!degree && (
+        <div className="mb-8">
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground">
+            <GraduationCap className="size-4 text-primary" />
+            Choose a degree
+          </h2>
+          {degrees.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
+              No subjects have been added yet. {isAdmin ? "Add the first subject above." : "Check back soon."}
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {degrees.map((d) => (
+                <button
+                  key={d}
+                  onClick={() => pickDegree(d)}
+                  className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition hover:border-primary/40"
+                >
+                  <span className="font-serif text-lg text-foreground">{d}</span>
+                  <ChevronRight className="size-4 text-muted-foreground transition group-hover:text-primary" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Level 2: Years */}
+      {degree && !year && (
+        <div className="mb-8">
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground">
+            <Layers className="size-4 text-primary" />
+            {degree} — choose a year
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {yearsForDegree.map((y) => (
+              <button
+                key={y}
+                onClick={() => pickYear(y)}
+                className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition hover:border-primary/40"
+              >
+                <span className="font-medium text-foreground">{y}</span>
+                <ChevronRight className="size-4 text-muted-foreground transition group-hover:text-primary" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Level 3: Branches */}
+      {degree && year && !branch && (
+        <div className="mb-8">
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground">
+            <Layers className="size-4 text-primary" />
+            {degree} · {year} — choose a branch
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {branchesForYear.map((b) => (
+              <button
+                key={b}
+                onClick={() => pickBranch(b)}
+                className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition hover:border-primary/40"
+              >
+                <span className="font-medium text-foreground">{b}</span>
+                <ChevronRight className="size-4 text-muted-foreground transition group-hover:text-primary" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Level 4: Subjects */}
+      {degree && year && branch && !subjectId && (
+        <div className="mb-8">
+          <h2 className="mb-3 text-sm font-medium text-foreground">
+            {degree} · {year} · {branch} — subjects
+          </h2>
+          {subjectsForBranch.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
+              No subjects in this branch yet. {isAdmin ? "Add one above." : "Check back soon."}
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {subjectsForBranch.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => pickSubject(s.id)}
+                  className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition hover:border-primary/40"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-foreground">{s.name}</p>
+                    {s.code && <p className="text-xs text-muted-foreground">{s.code}</p>}
+                  </div>
+                  <ChevronRight className="size-4 text-muted-foreground transition group-hover:text-primary" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Level 5: Subject detail — units + resources */}
+      {selectedSubject && (
+        <div className="mb-8">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-serif text-xl text-foreground">{selectedSubject.name}</h2>
+              {selectedSubject.code && <p className="text-xs text-muted-foreground">{selectedSubject.code}</p>}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {isAdmin && (
+                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { setUnitSubjectId(selectedSubject.id); setUnitOpen(true) }}>
+                  <Plus className="size-3.5" />
+                  Unit
+                </Button>
+              )}
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search resources"
+                    className="h-9 pl-9"
+                  />
+                </div>
+                <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v ?? "all")}>
+                  <SelectTrigger className="h-9 w-36">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All types</SelectItem>
+                    {Object.entries(TYPE_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          {/* Units */}
+          {unitsForSubject.length > 0 && (
+            <div className="mb-5 flex flex-wrap gap-2">
+              <button
+                onClick={() => setUnitId("")}
+                className={`rounded-full border px-3 py-1 text-xs transition ${
+                  !unitId ? "border-primary bg-primary/10 text-primary" : "border-border/70 text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                All units
+              </button>
+              {unitsForSubject.map((u) => (
+                <button
+                  key={u.id}
+                  onClick={() => setUnitId(unitId === u.id ? "" : u.id)}
+                  className={`rounded-full border px-3 py-1 text-xs transition ${
+                    unitId === u.id ? "border-primary bg-primary/10 text-primary" : "border-border/70 text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {u.name}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {visibleResources.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
+              No resources here yet. {isAdmin ? "Upload the first one." : "Check back soon."}
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {visibleResources.map((r) => (
+                <Card key={r.id} className="border-border/70 bg-card">
+                  <CardContent className="flex items-center justify-between gap-3 p-4">
+                    <a href={r.url} target="_blank" rel="noopener noreferrer" className="flex min-w-0 items-center gap-3">
+                      <FileText className="size-5 shrink-0 text-primary" />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-foreground hover:underline">{r.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {r.subjectName} · {TYPE_LABELS[r.type] ?? r.type}
+                          {r.unitName ? ` · ${r.unitName}` : ""}
+                        </p>
+                      </div>
+                    </a>
+                    {isAdmin && (
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        onClick={() => run(() => deleteResourceAction(r.id), "Resource deleted")}
+                        disabled={isPending}
+                        aria-label="Delete resource"
+                      >
+                        <Trash2 className="size-3.5 text-muted-foreground hover:text-destructive" />
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Calendar */}
+      <section className="mt-12">
+        <h2 className="mb-3 text-sm font-medium text-foreground">Academic calendar</h2>
+        {calendar.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
+            Nothing on the calendar yet.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {calendar.map((entry) => (
+              <div key={entry.id} className="flex items-start gap-3 rounded-lg border border-border/70 bg-card px-4 py-3">
+                <BookOpen className="mt-0.5 size-4 shrink-0 text-primary" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">{entry.title}</p>
+                  {entry.description && <p className="text-xs text-muted-foreground">{entry.description}</p>}
+                </div>
+                <Badge variant="outline" className="ml-auto shrink-0 border-border/60 font-normal text-muted-foreground">
+                  {new Date(`${entry.event_date}T00:00:00`).toLocaleDateString("en-IN", {
+                    day: "numeric",
+                    month: "short",
+                  })}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Upload resource */}
+      <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upload a resource</DialogTitle>
+            <DialogDescription>Admins can add notes, syllabi, and previous papers for students.</DialogDescription>
+          </DialogHeader>
+          <form
+            action={(formData) =>
+              run(() => {
+                formData.set("sphereId", member.sphereId ?? "")
+                const p = uploadResourceAction(formData)
+                return p.then((r) => {
+                  if (!r.error) setUploadOpen(false)
+                  return r
+                })
+              }, "Resource uploaded")
+            }
+            className="flex flex-col gap-4"
+          >
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="title">Title</Label>
+              <Input id="title" name="title" required placeholder="Data Structures — Unit 3 notes" />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>Subject</Label>
+              <Select name="subjectId" defaultValue={selectedSubject?.id ?? ""}>
+                <SelectTrigger>
+                  <SelectValue placeholder="General" />
+                </SelectTrigger>
+                <SelectContent>
+                  {subjects.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>Type</Label>
+              <Select name="type" defaultValue="notes">
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(TYPE_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="url">File or document URL</Label>
+              <Input id="url" name="url" type="url" required placeholder="https://..." />
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="ghost">
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button type="submit" disabled={isPending}>
+                Upload
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* New subject */}
+      <Dialog open={subjectOpen} onOpenChange={setSubjectOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add a subject</DialogTitle>
+          </DialogHeader>
+          <form
+            action={(formData) =>
+              run(() => {
+                formData.set("sphereId", member.sphereId ?? "")
+                const p = createSubjectAction(formData)
+                return p.then((r) => {
+                  if (!r.error) setSubjectOpen(false)
+                  return r
+                })
+              }, "Subject added")
+            }
+            className="flex flex-col gap-4"
+          >
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="name">Subject name</Label>
+              <Input id="name" name="name" required placeholder="Data Structures" />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="code">Code (optional)</Label>
+              <Input id="code" name="code" placeholder="CS-203" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-2">
+                <Label>Degree</Label>
+                <Select name="degree" defaultValue="">
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DEGREES.map((d) => (
+                      <SelectItem key={d} value={d}>
+                        {d}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label>Year</Label>
+                <Select name="year" defaultValue="">
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {YEARS.map((y) => (
+                      <SelectItem key={y} value={y}>
+                        {y}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="branch">Branch</Label>
+              <Input id="branch" name="branch" placeholder="CSE" />
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="ghost">
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button type="submit" disabled={isPending}>
+                Add subject
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* New unit */}
+      <Dialog open={unitOpen} onOpenChange={setUnitOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add a unit</DialogTitle>
+            <DialogDescription>Units break a subject into parts (e.g. Unit 1, Unit 2).</DialogDescription>
+          </DialogHeader>
+          <form
+            action={(formData) =>
+              run(() => {
+                formData.set("subjectId", unitSubjectId)
+                const p = createUnitAction(formData)
+                return p.then((r) => {
+                  if (!r.error) setUnitOpen(false)
+                  return r
+                })
+              }, "Unit added")
+            }
+            className="flex flex-col gap-4"
+          >
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="unitName">Unit name</Label>
+              <Input id="unitName" name="name" required placeholder="Unit 1 — Arrays" />
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="ghost">
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button type="submit" disabled={isPending}>
+                Add unit
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Calendar entry */}
+      <Dialog open={calendarOpen} onOpenChange={setCalendarOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add a calendar entry</DialogTitle>
+          </DialogHeader>
+          <form
+            action={(formData) =>
+              run(() => {
+                formData.set("sphereId", member.sphereId ?? "")
+                const p = createCalendarEntryAction(formData)
+                return p.then((r) => {
+                  if (!r.error) setCalendarOpen(false)
+                  return r
+                })
+              }, "Calendar updated")
+            }
+            className="flex flex-col gap-4"
+          >
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="title">Title</Label>
+              <Input id="title" name="title" required placeholder="Mid-semester exams" />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="date">Date</Label>
+              <Input id="date" name="date" type="date" required />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="description">Description (optional)</Label>
+              <Textarea id="description" name="description" rows={2} />
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="ghost">
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button type="submit" disabled={isPending}>
+                Add entry
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}

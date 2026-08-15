@@ -1,0 +1,310 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Light — the primary theme: warm off-white, clean white surfaces,
+   electric cyan/aqua energy, very light lavender/blue gradients,
+   dark navy typography. */
+:root {
+  color-scheme: light;
+  --background: oklch(0.975 0.006 90);
+  --foreground: oklch(0.19 0.035 255);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.19 0.035 255);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.19 0.035 255);
+  --primary: oklch(0.62 0.17 225);
+  --primary-foreground: oklch(0.99 0.005 90);
+  --secondary: oklch(0.945 0.02 240);
+  --secondary-foreground: oklch(0.25 0.04 255);
+  --muted: oklch(0.955 0.012 240);
+  --muted-foreground: oklch(0.46 0.03 250);
+  --accent: oklch(0.93 0.03 255);
+  --accent-foreground: oklch(0.22 0.04 255);
+  --destructive: oklch(0.55 0.22 25);
+  --border: oklch(0.2 0.035 255 / 12%);
+  --input: oklch(0.2 0.035 255 / 16%);
+  --ring: oklch(0.62 0.17 225);
+  --chart-1: oklch(0.62 0.17 225);
+  --chart-2: oklch(0.55 0.13 195);
+  --chart-3: oklch(0.68 0.12 160);
+  --chart-4: oklch(0.72 0.13 300);
+  --chart-5: oklch(0.6 0.14 45);
+  --radius: 0.5rem;
+  --sidebar: oklch(0.97 0.008 90);
+  --sidebar-foreground: oklch(0.19 0.035 255);
+  --sidebar-primary: oklch(0.62 0.17 225);
+  --sidebar-primary-foreground: oklch(0.99 0.005 90);
+  --sidebar-accent: oklch(0.94 0.02 240);
+  --sidebar-accent-foreground: oklch(0.22 0.04 255);
+  --sidebar-border: oklch(0.2 0.035 255 / 12%);
+  --sidebar-ring: oklch(0.62 0.17 225);
+}
+
+/* Dark — alternative theme. Deep navy surfaces, cyan energy. */
+.dark {
+  color-scheme: dark;
+  --background: oklch(0.16 0.02 260);
+  --foreground: oklch(0.94 0.01 90);
+  --card: oklch(0.2 0.02 260);
+  --card-foreground: oklch(0.94 0.01 90);
+  --popover: oklch(0.2 0.02 260);
+  --popover-foreground: oklch(0.94 0.01 90);
+  --primary: oklch(0.72 0.14 220);
+  --primary-foreground: oklch(0.14 0.03 260);
+  --secondary: oklch(0.26 0.02 260);
+  --secondary-foreground: oklch(0.94 0.01 90);
+  --muted: oklch(0.24 0.02 260);
+  --muted-foreground: oklch(0.66 0.02 90);
+  --accent: oklch(0.28 0.025 260);
+  --accent-foreground: oklch(0.94 0.01 90);
+  --destructive: oklch(0.62 0.21 25);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.72 0.14 220);
+  --chart-1: oklch(0.72 0.14 220);
+  --chart-2: oklch(0.6 0.12 195);
+  --chart-3: oklch(0.68 0.11 160);
+  --chart-4: oklch(0.7 0.12 300);
+  --chart-5: oklch(0.62 0.13 45);
+  --sidebar: oklch(0.18 0.02 260);
+  --sidebar-foreground: oklch(0.94 0.01 90);
+  --sidebar-primary: oklch(0.72 0.14 220);
+  --sidebar-primary-foreground: oklch(0.14 0.03 260);
+  --sidebar-accent: oklch(0.26 0.02 260);
+  --sidebar-accent-foreground: oklch(0.94 0.01 90);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.72 0.14 220);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Landing hero animations — respect reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .hero-orbit {
+    animation: hero-orbit-spin 60s linear infinite;
+  }
+  .hero-orbit-reverse {
+    animation: hero-orbit-spin 80s linear infinite reverse;
+  }
+  .hero-node-pulse {
+    animation: hero-node-pulse 4s ease-in-out infinite;
+  }
+  .hero-network-dash {
+    animation: hero-network-dash 14s linear infinite;
+  }
+  .hero-particle {
+    animation: hero-particle-drift linear infinite;
+  }
+  .hero-float {
+    animation: hero-float 7s ease-in-out infinite;
+  }
+}
+
+@keyframes hero-orbit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes hero-node-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.35);
+  }
+}
+
+@keyframes hero-network-dash {
+  to {
+    stroke-dashoffset: -220;
+  }
+}
+
+@keyframes hero-particle-drift {
+  from {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.9;
+  }
+  to {
+    transform: translateY(-46vh);
+    opacity: 0;
+  }
+}
+
+@keyframes hero-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* Dashboard — subtle section entrance (fade + rise). Respects reduced motion:
+   users who prefer it get a static layout with no animation. */
+@media (prefers-reduced-motion: no-preference) {
+  .dash-enter {
+    animation: dash-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: var(--dash-delay, 0ms);
+  }
+}
+
+@keyframes dash-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Dashboard ambient background — slow, subtle gradient drift behind the
+   content. Pure transform/opacity so it stays cheap. Reduced motion renders
+   the shapes static. */
+@media (prefers-reduced-motion: no-preference) {
+  .dash-ambient {
+    animation: dash-drift 20s ease-in-out infinite alternate;
+  }
+  .dash-ambient-slow {
+    animation: dash-drift 30s ease-in-out infinite alternate-reverse;
+  }
+  .dash-ambient-slower {
+    animation: dash-drift 40s ease-in-out infinite alternate;
+  }
+  .dash-float {
+    animation: dash-float 7s ease-in-out infinite;
+  }
+  .dash-twinkle {
+    animation: dash-twinkle 4.5s ease-in-out infinite;
+  }
+}
+
+@keyframes dash-drift {
+  from {
+    transform: translate3d(-2%, -2%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(3%, 4%, 0) scale(1.07);
+  }
+}
+
+@keyframes dash-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes dash-twinkle {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+/* Sphere section — continuously rotating orbits with upright handle labels.
+   The orbit container spins (θ); each angle wrapper holds a static offset (φ)
+   so chips ride the ring; each chip counter-rotates by −φ and each label
+   counter-spins by −θ, so text never tilts. Reduced motion renders a static
+   layout with chips in their resting positions. */
+@media (prefers-reduced-motion: no-preference) {
+  .sphere-orbit {
+    animation: sphere-orbit-spin var(--orbit-duration, 56s) linear infinite;
+    will-change: transform;
+  }
+  .sphere-orbit-label {
+    animation: sphere-orbit-spin var(--orbit-duration, 56s) linear infinite reverse;
+    will-change: transform;
+  }
+}
+
+@keyframes sphere-orbit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sphere-orbit-angle {
+  transform: rotate(var(--orbit-angle, 0deg));
+}
+
+.sphere-orbit-chip {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  /* Center on the ring's 12 o'clock, then cancel the wrapper's static tilt. */
+  transform: translate(-50%, -50%) rotate(calc(var(--orbit-angle, 0deg) * -1));
+}
+
+.sphere-orbit-label {
+  display: inline-block;
+}
