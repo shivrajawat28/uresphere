@@ -77,7 +77,7 @@ export function DashboardNav({ member, initialUnread = 0 }: { member: CurrentMem
           { href: "/dashboard/global-listings", label: "Global Listings", icon: Globe },
           { href: "/dashboard/premium", label: "Premium", icon: Gem },
           { href: "/dashboard/notifications", label: "Notifications", icon: Bell, badge: unread },
-          { href: "/about", label: "About", icon: Orbit },
+          { href: "/dashboard/about", label: "About", icon: Orbit },
         ],
       },
     ],
@@ -106,7 +106,7 @@ export function DashboardNav({ member, initialUnread = 0 }: { member: CurrentMem
       { href: "/dashboard/global-listings", label: "Global Listings", icon: Globe },
       { href: "/dashboard/premium", label: "Premium", icon: Gem },
       { href: "/dashboard/settings", label: "Profile & settings", icon: Settings },
-      { href: "/about", label: "About", icon: Orbit },
+      { href: "/dashboard/about", label: "About", icon: Orbit },
     ],
     [],
   )
