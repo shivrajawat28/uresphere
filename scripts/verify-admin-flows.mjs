@@ -230,11 +230,14 @@ try {
     const planOnRoadmap = await user.getByText(planTitle, { exact: false }).first().waitFor({ state: "visible", timeout: 15000 }).then(() => true).catch(() => false)
     check("Deep-linked plan visible on Dashboard Roadmap", planOnRoadmap, planTitle)
 
-    // Roadmap feedback flow — stars + comment saved from the dashboard page
-    await user.locator('button[role="radio"][aria-label="5 stars"]').click()
-    await user.locator('input[placeholder*="What would make this great"]').fill("Works from the roadmap page!")
-    await user.getByRole("button", { name: /feedback/i }).click()
-    const roadmapSaved = await user.getByText("Thanks!", { exact: false }).first().waitFor({ state: "visible", timeout: 10000 }).then(() => true).catch(() => false)
+    // Roadmap feedback flow — stars + comment saved from the dashboard page.
+    // Scope every interaction to THIS plan's card (the roadmap shows several
+    // published plans, each with its own star row / comment field).
+    const planCard = user.locator("article").filter({ hasText: planTitle }).first()
+    await planCard.locator('button[role="radio"][aria-label="5 stars"]').click()
+    await planCard.locator('input[placeholder*="What would make this great"]').fill("Works from the roadmap page!")
+    await planCard.getByRole("button", { name: /feedback/i }).click()
+    const roadmapSaved = await planCard.getByText("Thanks!", { exact: false }).first().waitFor({ state: "visible", timeout: 10000 }).then(() => true).catch(() => false)
     check("Roadmap feedback submitted (rating + comment)", roadmapSaved)
   }
 
