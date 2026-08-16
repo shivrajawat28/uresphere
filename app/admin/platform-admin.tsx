@@ -5,6 +5,7 @@ import { Users, Trophy, CalendarDays, Tag, Orbit, ArrowRight } from "lucide-reac
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import type { AdAdminRow } from "@/lib/ads"
+import type { AdminFeedbackItem } from "@/lib/data/feedback"
 import {
   CollegesSection,
   CollegeRequestsSection,
@@ -15,6 +16,7 @@ import {
   PromotionPaymentSection,
 } from "./platform-sections"
 import { AdCampaignsSection } from "./ad-campaigns-section"
+import { FeedbackSection } from "./feedback-section"
 
 export type SphereCard = {
   sphere_id: string
@@ -86,6 +88,7 @@ export type PlatformData = {
     instructions: string
   }
   ads: AdAdminRow[]
+  feedback: AdminFeedbackItem[]
   auditLogs: { id: string; action: string; entity_type: string | null; details: Record<string, unknown>; created_at: string }[]
 }
 
@@ -177,6 +180,7 @@ export function PlatformAdmin({
             <TabsTrigger value="work">Work with us</TabsTrigger>
             <TabsTrigger value="advertising">Advertising</TabsTrigger>
             <TabsTrigger value="promotions">Promotions</TabsTrigger>
+            <TabsTrigger value="feedback">Feedback</TabsTrigger>
             <TabsTrigger value="audit">Audit log</TabsTrigger>
           </TabsList>
 
@@ -201,6 +205,9 @@ export function PlatformAdmin({
           </TabsContent>
           <TabsContent value="promotions" className="space-y-4">
             <PromotionPaymentSection data={platform.promotionPayment} />
+          </TabsContent>
+          <TabsContent value="feedback" className="space-y-4">
+            <FeedbackSection feedback={platform.feedback} />
           </TabsContent>
           <TabsContent value="audit" className="space-y-2">
             {platform.auditLogs.length === 0 ? (

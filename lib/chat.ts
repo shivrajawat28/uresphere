@@ -92,6 +92,21 @@ export function selectInitialWindow(
 }
 
 /**
+ * Whether a keydown should send the chat message instead of inserting a newline.
+ * True only for a bare Enter: Shift+Enter (newline), IME composition and the
+ * legacy keyCode 229 (some IMEs / virtual keyboards) never send. Shared by the
+ * Sphere chat and group chat composers so the behavior stays identical.
+ */
+export function shouldSendOnEnter(e: {
+  key: string
+  shiftKey: boolean
+  isComposing: boolean
+  keyCode: number
+}): boolean {
+  return e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229
+}
+
+/**
  * Computes the scrollTop that keeps the user's reading position stable after
  * older messages are prepended above the current viewport.
  *

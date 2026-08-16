@@ -10,7 +10,7 @@ import {
   sendGroupMessageAction,
   deleteGroupMessageAction,
 } from "@/lib/actions/groups"
-import { mergeChatMessages } from "@/lib/chat"
+import { mergeChatMessages, shouldSendOnEnter } from "@/lib/chat"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -430,6 +430,9 @@ function GroupChat({
 
   function handleSend(e: React.FormEvent) {
     e.preventDefault()
+    // Guard against duplicate sends: a second Enter (or click) while the
+    // previous send is still in flight is ignored.
+    if (isPending) return
     const body = draft.trim()
     if (!body) return
     const formData = new FormData()
@@ -440,6 +443,15 @@ function GroupChat({
       const result = await sendGroupMessageAction(formData)
       if (result.error) toast.error(result.error)
     })
+  }
+
+  // Enter sends the message; Shift+Enter inserts a newline; mid-IME
+  // composition (CJK input) never sends. Same rule as Sphere chat.
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (shouldSendOnEnter({ key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing, keyCode: e.keyCode })) {
+      e.preventDefault()
+      handleSend(e as unknown as React.FormEvent)
+    }
   }
 
   function handleDeleteMessage(id: string) {
@@ -537,6 +549,7 @@ function GroupChat({
               <Textarea
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={handleKeyDown}
                 placeholder={`Message as ${currentHandle}...`}
                 rows={1}
                 maxLength={1000}

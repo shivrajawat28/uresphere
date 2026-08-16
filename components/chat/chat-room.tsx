@@ -8,6 +8,7 @@ import {
   deletedMessageLabel,
   mergeChatMessages,
   replaceOptimisticMessage,
+  shouldSendOnEnter,
   type ChatMessage,
   type DeletedByRole,
 } from "@/lib/chat"
@@ -370,8 +371,9 @@ export function ChatRoom({
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    // Avoid submitting mid-IME composition (CJK input) on Enter.
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+    // Enter sends, Shift+Enter inserts a newline, and mid-IME composition
+    // (CJK input) never sends. Same rule as the group chat composer.
+    if (shouldSendOnEnter({ key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing, keyCode: e.keyCode })) {
       e.preventDefault()
       handleSend(e as unknown as React.FormEvent)
     }

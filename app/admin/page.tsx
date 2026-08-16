@@ -2,6 +2,7 @@ import { requireAdminAccess } from "@/lib/data/session"
 import { createClient } from "@/lib/supabase/server"
 import { summarizePlanFeedback } from "@/lib/plans"
 import { mapAdRow } from "@/lib/ads"
+import { loadAdminFeedback } from "@/lib/data/feedback"
 import { PlatformAdmin } from "./platform-admin"
 
 export const dynamic = "force-dynamic"
@@ -57,7 +58,7 @@ export default async function AdminPage() {
 
 async function loadPlatformData() {
   const supabase = await createClient()
-  const [collegesResult, aliasesResult, requestsResult, plansResult, feedbackResult, teamResult, applicationsResult, adConfigResult, adCampaignsResult, auditResult, promoConfigResult] =
+  const [collegesResult, aliasesResult, requestsResult, plansResult, feedbackResult, teamResult, applicationsResult, adConfigResult, adCampaignsResult, auditResult, promoConfigResult, userFeedback] =
     await Promise.all([
       supabase
         .from("colleges")
@@ -87,6 +88,9 @@ async function loadPlatformData() {
         .order("created_at", { ascending: false })
         .limit(50),
       supabase.from("platform_config").select("value").eq("key", "promotion_payment").maybeSingle(),
+      // Every feedback submission the super admin is authorized to see, with
+      // the trusted identity (real name / email / handle) joined server-side.
+      loadAdminFeedback(),
     ])
 
   const aliasesByCollegeId: Record<string, string[]> = {}
@@ -163,6 +167,7 @@ async function loadPlatformData() {
       ...mapAdRow(row as Parameters<typeof mapAdRow>[0]),
       createdAt: row.created_at,
     })),
+    feedback: userFeedback,
     auditLogs: (auditResult.data ?? []).map((a) => ({
       id: a.id,
       action: a.action,

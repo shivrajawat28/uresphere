@@ -5,6 +5,7 @@ import {
   mergeChatMessages,
   replaceOptimisticMessage,
   selectInitialWindow,
+  shouldSendOnEnter,
 } from "@/lib/chat"
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -118,6 +119,36 @@ describe("selectInitialWindow", () => {
     const { messages, hasMore } = selectInitialWindow(all, 10)
     expect(messages).toHaveLength(4)
     expect(hasMore).toBe(false)
+  })
+})
+
+describe("shouldSendOnEnter", () => {
+  function ev(overrides: Partial<Parameters<typeof shouldSendOnEnter>[0]> = {}) {
+    return { key: "Enter", shiftKey: false, isComposing: false, keyCode: 13, ...overrides }
+  }
+
+  it("sends on a bare Enter", () => {
+    expect(shouldSendOnEnter(ev())).toBe(true)
+  })
+
+  it("inserts a newline on Shift+Enter", () => {
+    expect(shouldSendOnEnter(ev({ shiftKey: true }))).toBe(false)
+  })
+
+  it("never sends mid-IME composition", () => {
+    expect(shouldSendOnEnter(ev({ isComposing: true }))).toBe(false)
+  })
+
+  it("never sends on the legacy keyCode 229 some IMEs / virtual keyboards emit", () => {
+    expect(shouldSendOnEnter(ev({ keyCode: 229 }))).toBe(false)
+    // even when isComposing is not reported
+    expect(shouldSendOnEnter(ev({ keyCode: 229, isComposing: false }))).toBe(false)
+  })
+
+  it("ignores every other key (typing is unaffected)", () => {
+    expect(shouldSendOnEnter(ev({ key: "a" }))).toBe(false)
+    expect(shouldSendOnEnter(ev({ key: "Backspace" }))).toBe(false)
+    expect(shouldSendOnEnter(ev({ key: "Tab", shiftKey: true }))).toBe(false)
   })
 })
 
