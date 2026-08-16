@@ -15,6 +15,7 @@ import {
   createClubAction,
   createSubjectAction,
 } from "@/lib/actions/admin"
+import { verifyPromotionPaymentAction } from "@/lib/actions/platform"
 import { deleteMessageAction } from "@/lib/actions/chat"
 import { adminDeleteGroupAction } from "@/lib/actions/groups"
 import { createClient } from "@/lib/supabase/client"
@@ -56,7 +57,19 @@ type SocialMessage = ChatMessage & {
   // Admin-only original content of deleted messages (chat_message_archives).
   originalBody?: string | null
 }
-type PromotionRow = { id: string; title: string; url: string; status: string; fee_status: string; user_id: string; created_at: string }
+type PromotionRow = {
+  id: string
+  title: string
+  url: string
+  status: string
+  fee_status: string
+  utr: string | null
+  user_id: string
+  publisher: string
+  created_at: string
+  reviewed_at: string | null
+  paid_at: string | null
+}
 type ListingRow = { id: string; title: string; price_cents: number; category: string; status: string; seller_id: string }
 type EventRow = { id: string; title: string; event_date: string; event_time: string | null; venue: string; organizer: string }
 type ClubRow = { id: string; name: string; description: string; logo_url: string | null }
@@ -91,6 +104,7 @@ export function SphereAdmin({
   users,
   reports,
   promotions,
+  promotionPriceInr,
   listings,
   events,
   clubs,
@@ -113,6 +127,7 @@ export function SphereAdmin({
   users: UserRow[]
   reports: ReportRow[]
   promotions: PromotionRow[]
+  promotionPriceInr: number
   listings: ListingRow[]
   events: EventRow[]
   clubs: ClubRow[]
@@ -562,40 +577,100 @@ export function SphereAdmin({
             {promotions.length === 0 ? (
               <Empty text="No promotions submitted in this Sphere." />
             ) : (
-              promotions.map((p) => (
-                <Card key={p.id} className="border-border/70 bg-card">
-                  <CardContent className="flex flex-wrap items-center gap-3 p-4">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-foreground">{p.title || p.url}</p>
-                      <a href={p.url} target="_blank" rel="noopener noreferrer" className="truncate text-xs text-primary hover:underline">
-                        {p.url}
-                      </a>
-                    </div>
-                    <Badge variant="outline" className="border-border/60 text-[10px] font-normal capitalize">
-                      {p.status}
-                    </Badge>
-                    {p.status === "pending" && (
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          disabled={isPending}
-                          onClick={() => run(() => reviewPromotionAction(p.id, "approved"), "Promotion approved")}
-                        >
-                          Approve
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={isPending}
-                          onClick={() => run(() => reviewPromotionAction(p.id, "rejected"), "Promotion rejected")}
-                        >
-                          Reject
-                        </Button>
+              promotions.map((p) => {
+                const paymentLabel =
+                  p.fee_status === "free"
+                    ? "No fee"
+                    : p.fee_status === "paid"
+                      ? "Payment verified"
+                      : p.fee_status === "payment_pending"
+                        ? "Payment pending verification"
+                        : `Payment due (₹${promotionPriceInr})`
+                const needsPayment = p.fee_status === "due"
+                return (
+                  <Card key={p.id} className="border-border/70 bg-card">
+                    <CardContent className="p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-foreground">{p.title || p.url}</p>
+                          <a href={p.url} target="_blank" rel="noopener noreferrer" className="truncate text-xs text-primary hover:underline">
+                            {p.url}
+                          </a>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            by <span className="font-mono text-[11px] text-primary">{p.publisher}</span>
+                            {" · "}submitted{" "}
+                            {new Date(p.created_at).toLocaleString("en-IN", {
+                              day: "numeric",
+                              month: "short",
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <Badge variant="outline" className="border-border/60 text-[10px] font-normal capitalize">
+                            {p.status}
+                          </Badge>
+                          <span className="text-[11px] text-muted-foreground/80">{paymentLabel}</span>
+                        </div>
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))
+
+                      {p.utr && (
+                        <p className="mt-2 rounded-md bg-secondary/40 px-3 py-1.5 text-xs text-muted-foreground">
+                          UTR/reference: <span className="font-mono font-medium text-foreground">{p.utr}</span>
+                          {p.paid_at
+                            ? ` · submitted ${new Date(p.paid_at).toLocaleString("en-IN", {
+                                day: "numeric",
+                                month: "short",
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}`
+                            : ""}
+                        </p>
+                      )}
+                      {p.reviewed_at && (
+                        <p className="mt-1 text-[11px] text-muted-foreground/70">
+                          Reviewed {new Date(p.reviewed_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
+                        </p>
+                      )}
+
+                      {p.status === "pending" && (
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <Button
+                            size="sm"
+                            disabled={isPending || needsPayment}
+                            title={needsPayment ? "Verify the UTR before approving" : undefined}
+                            onClick={() => run(() => reviewPromotionAction(p.id, "approved"), "Promotion approved")}
+                          >
+                            Approve
+                          </Button>
+                          {needsPayment && (
+                            <span className="text-[11px] text-amber-600">Payment not received yet — verify the UTR first.</span>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={isPending}
+                            onClick={() => run(() => reviewPromotionAction(p.id, "rejected"), "Promotion rejected")}
+                          >
+                            Reject
+                          </Button>
+                          {p.fee_status === "payment_pending" && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={isPending}
+                              onClick={() => run(() => verifyPromotionPaymentAction(p.id), "Payment verified")}
+                            >
+                              Verify payment
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })
             )}
           </TabsContent>
         )}

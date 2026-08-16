@@ -687,4 +687,101 @@ select (select public.can_manage_academic((select id from public.spheres where s
        (select public.can_manage_academic((select id from public.spheres where slug = 'its'), '', 'Second Year', '')) = false as legacy_scalar_out_of_scope_denied;
 reset role;
 
+-- ── 13c. Section admins + promotions (migration 0011) ────────────────────
+select '13c. section admins + promotions' as test;
+
+-- Fay (ITS member, no role) becomes an event_manager of ITS. She can create
+-- events in HER Sphere but never in another Sphere, even with a forged
+-- sphere_id (WITH CHECK raises).
+set role postgres;
+insert into public.role_assignments (user_id, sphere_id, role, scope)
+select '66666666-6666-6666-6666-666666666666', id, 'event_manager',
+       '{"permissions":["events.read","events.create","events.update","events.delete"]}'::jsonb
+from public.spheres where slug = 'its';
+set role authenticated;
+set app.uid = '66666666-6666-6666-6666-666666666666';  -- Fay
+insert into public.events (sphere_id, title, event_date, created_by)
+select id, 'ITS Hackathon', current_date + 3, '66666666-6666-6666-6666-666666666666'
+from public.spheres where slug = 'its';
+select (select count(*) from public.events where title = 'ITS Hackathon') = 1 as event_manager_creates_in_own_sphere;
+do $$
+begin
+  begin
+    insert into public.events (sphere_id, title, event_date, created_by)
+    select id, 'DTU Hack', current_date + 3, '66666666-6666-6666-6666-666666666666'
+    from public.spheres where slug = 'delhi-technological';
+    raise exception 'FAIL: event manager wrote into another Sphere';
+  exception when insufficient_privilege then
+    raise notice 'OK: cross-sphere event insert blocked';
+  end;
+end $$;
+select (select count(*) from public.events where title = 'DTU Hack') = 0 as cross_sphere_event_insert_blocked;
+
+-- A plain member (no assignment) still cannot create events.
+set app.uid = '44444444-4444-4444-4444-444444444444';  -- Dana
+select (select public.has_permission('events.create')) = false as plain_member_no_event_permission;
+reset role;
+
+-- Bob (ITS) becomes a promotion_moderator: he may review (UPDATE) promotions
+-- inside ITS, but RLS silently filters updates to promotions in DTU.
+set role postgres;
+insert into public.role_assignments (user_id, sphere_id, role, scope)
+select '22222222-2222-2222-2222-222222222222', id, 'promotion_moderator',
+       '{"permissions":["promotions.review","promotions.approve","promotions.reject"]}'::jsonb
+from public.spheres where slug = 'its';
+insert into public.promotions (sphere_id, user_id, url, title, status, fee_status, utr)
+select id, '44444444-4444-4444-4444-444444444444', 'https://its.example.com', 'ITS promo', 'pending', 'payment_pending', 'UTR12345'
+from public.spheres where slug = 'its';
+insert into public.promotions (sphere_id, user_id, url, title, status, fee_status, utr)
+select id, '33333333-3333-3333-3333-333333333333', 'https://dtu.example.com', 'DTU promo', 'pending', 'payment_pending', 'UTR67890'
+from public.spheres where slug = 'delhi-technological';
+set role authenticated;
+set app.uid = '22222222-2222-2222-2222-222222222222';  -- Bob
+update public.promotions set fee_status = 'paid' where title = 'ITS promo';
+select (select fee_status from public.promotions where title = 'ITS promo') = 'paid' as promotion_moderator_reviews_own_sphere;
+update public.promotions set fee_status = 'paid' where title = 'DTU promo';
+select (select fee_status from public.promotions where title = 'DTU promo') = 'payment_pending' as promotion_moderator_cannot_touch_other_sphere;
+reset role;
+
+-- Social moderation: Bob also holds social_moderator and can resolve ITS
+-- reports, but a DTU report is invisible to him (RLS filters the UPDATE).
+set role postgres;
+insert into public.role_assignments (user_id, sphere_id, role, scope)
+select '22222222-2222-2222-2222-222222222222', id, 'social_moderator',
+       '{"permissions":["social.moderate"]}'::jsonb
+from public.spheres where slug = 'its';
+insert into public.reports (reporter_id, target_type, target_id, sphere_id, reason)
+select '33333333-3333-3333-3333-333333333333', 'event',
+       (select id from public.events where title = 'DTU Tech Fest'), id, 'dtu report'
+from public.spheres where slug = 'delhi-technological';
+set role authenticated;
+set app.uid = '22222222-2222-2222-2222-222222222222';  -- Bob
+update public.reports set status = 'resolved' where sphere_id = (select id from public.spheres where slug = 'its');
+select (select count(*) from public.reports where sphere_id = (select id from public.spheres where slug = 'its') and status = 'resolved') = 1 as social_moderator_resolves_own_sphere_reports;
+update public.reports set status = 'resolved' where sphere_id = (select id from public.spheres where slug = 'delhi-technological');
+select (select count(*) from public.reports where sphere_id = (select id from public.spheres where slug = 'delhi-technological') and status = 'open') = 1 as social_moderator_cannot_touch_other_sphere_reports;
+reset role;
+
+-- notify_user RPC: inserts a notification even though authenticated users have
+-- no direct INSERT policy on notifications (SECURITY DEFINER).
+set role authenticated;
+set app.uid = '66666666-6666-6666-6666-666666666666';  -- Fay
+select public.notify_user('66666666-6666-6666-6666-666666666666', 'test', 'Hello', 'Body', '/dashboard');
+reset role;
+select (select count(*) from public.notifications where user_id = '66666666-6666-6666-6666-666666666666' and type = 'test') = 1 as notify_user_rpc_inserts;
+-- A plain user has no INSERT policy on notifications — direct insert raises.
+set role authenticated;
+set app.uid = '44444444-4444-4444-4444-444444444444';  -- Dana
+select (select count(*) from public.notifications where user_id = '44444444-4444-4444-4444-444444444444') = 0 as user_sees_only_own_notifications;
+do $$
+begin
+  begin
+    insert into public.notifications (user_id, type, title) values ('44444444-4444-4444-4444-444444444444', 'general', 'spam');
+    raise exception 'FAIL: user inserted a notification directly';
+  exception when insufficient_privilege then
+    raise notice 'OK: direct notification insert blocked';
+  end;
+end $$;
+reset role;
+
 select 'ALL SQL VERIFICATION COMPLETE' as done;

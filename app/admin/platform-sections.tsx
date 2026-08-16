@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useRef, useState, useTransition } from "react"
 import {
   upsertPlanAction,
   deletePlanAction,
@@ -13,8 +13,9 @@ import {
   createCollegeFromRequestAction,
   upsertCollegeAction,
   setCollegeStatusAction,
+  updatePromotionPaymentConfigAction,
 } from "@/lib/actions/platform"
-import { Orbit } from "lucide-react"
+import { Orbit, Loader2, Upload, X, QrCode } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -55,6 +56,7 @@ export type PlatformData = {
   team: { id: string; name: string; role: string; photo_url: string | null; short_bio: string; bio: string; display_order: number; active: boolean }[]
   applications: { id: string; full_name: string; email: string; phone: string; college: string; year: string; skills: string; experience: string; portfolio: string; motivation: string; links: string; resume_url: string | null; status: string; admin_note: string; created_at: string }[]
   advertising: { contact_phone: string; contact_email: string }
+  promotionPayment: { price_inr: number; duration_days: number; qr_image_url: string | null; upi_id: string | null; instructions: string }
 }
 
 type OrderRow = {
@@ -815,6 +817,118 @@ export function OrdersSection({ orders }: { orders: OrderRow[] }) {
         ))
       )}
     </div>
+  )
+}
+
+export function PromotionPaymentSection({ data }: { data: PlatformData["promotionPayment"] }) {
+  const [isPending, startTransition] = useTransition()
+  const [uploading, setUploading] = useState(false)
+  const [qrUrl, setQrUrl] = useState(data.qr_image_url ?? "")
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  function uploadQr(file: File) {
+    const formData = new FormData()
+    formData.set("file", file)
+    setUploading(true)
+    fetch("/api/promotions/upload", { method: "POST", body: formData })
+      .then(async (res) => {
+        const json = (await res.json()) as { url?: string; error?: string }
+        if (!res.ok || !json.url) throw new Error(json.error ?? "Upload failed")
+        setQrUrl(json.url)
+        toast.success("QR uploaded")
+      })
+      .catch((err) => toast.error(err instanceof Error ? err.message : "Upload failed"))
+      .finally(() => setUploading(false))
+  }
+
+  function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    fd.set("qrImageUrl", qrUrl)
+    startTransition(async () => {
+      const result = await updatePromotionPaymentConfigAction(fd)
+      if (result.error) toast.error(result.error)
+      else toast.success("Promotion payment settings saved")
+    })
+  }
+
+  return (
+    <form onSubmit={submit} className="max-w-lg space-y-4">
+      <p className="text-sm text-muted-foreground">
+        This QR and fee are shown to members after they submit a promotion. Only super admins can change them.
+      </p>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="promoPrice">Promotion fee (₹)</Label>
+          <Input id="promoPrice" name="priceInr" type="number" min={0} step="any" required defaultValue={data.price_inr} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="promoDuration">Live duration (days)</Label>
+          <Input id="promoDuration" name="durationDays" type="number" min={1} max={90} required defaultValue={data.duration_days} />
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="promoUpi">UPI ID (optional)</Label>
+        <Input id="promoUpi" name="upiId" defaultValue={data.upi_id ?? ""} placeholder="uresphere@upi" maxLength={120} />
+        <p className="text-xs text-muted-foreground">Shown to the member alongside the QR so they can pay by UPI id too.</p>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Payment QR code</Label>
+        {qrUrl ? (
+          <div className="flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={qrUrl} alt="Payment QR preview" className="h-24 w-24 rounded-md border border-border bg-white object-contain" />
+            <Button type="button" size="sm" variant="outline" onClick={() => setQrUrl("")} className="gap-1">
+              <X className="size-3.5" aria-hidden="true" />
+              Remove
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3">
+            <div className="flex h-24 w-24 items-center justify-center rounded-md border border-dashed border-border bg-background">
+              <QrCode className="size-8 text-muted-foreground/50" />
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={uploading}
+              onClick={() => fileInputRef.current?.click()}
+              className="gap-1.5"
+            >
+              {uploading ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
+              {uploading ? "Uploading…" : "Upload QR"}
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) uploadQr(file)
+                e.target.value = ""
+              }}
+            />
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Stored in Vercel Blob (max 5MB). Members see this QR — never a hardcoded URL.
+        </p>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="promoInstructions">Payment instructions</Label>
+        <Textarea id="promoInstructions" name="instructions" rows={3} maxLength={1000} defaultValue={data.instructions} />
+      </div>
+
+      <Button type="submit" disabled={isPending}>
+        Save payment settings
+      </Button>
+    </form>
   )
 }
 

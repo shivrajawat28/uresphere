@@ -12,6 +12,7 @@ import {
   TeamSection,
   WorkWithUsSection,
   AdvertisingSection,
+  PromotionPaymentSection,
 } from "./platform-sections"
 import { AdCampaignsSection } from "./ad-campaigns-section"
 
@@ -77,6 +78,13 @@ export type PlatformData = {
     created_at: string
   }[]
   advertising: { contact_phone: string; contact_email: string }
+  promotionPayment: {
+    price_inr: number
+    duration_days: number
+    qr_image_url: string | null
+    upi_id: string | null
+    instructions: string
+  }
   ads: AdAdminRow[]
   auditLogs: { id: string; action: string; entity_type: string | null; details: Record<string, unknown>; created_at: string }[]
 }
@@ -168,6 +176,7 @@ export function PlatformAdmin({
             <TabsTrigger value="team">Platform team</TabsTrigger>
             <TabsTrigger value="work">Work with us</TabsTrigger>
             <TabsTrigger value="advertising">Advertising</TabsTrigger>
+            <TabsTrigger value="promotions">Promotions</TabsTrigger>
             <TabsTrigger value="audit">Audit log</TabsTrigger>
           </TabsList>
 
@@ -189,6 +198,9 @@ export function PlatformAdmin({
           <TabsContent value="advertising" className="space-y-8">
             <AdCampaignsSection ads={platform.ads} />
             <AdvertisingSection data={platform.advertising} />
+          </TabsContent>
+          <TabsContent value="promotions" className="space-y-4">
+            <PromotionPaymentSection data={platform.promotionPayment} />
           </TabsContent>
           <TabsContent value="audit" className="space-y-2">
             {platform.auditLogs.length === 0 ? (

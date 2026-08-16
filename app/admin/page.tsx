@@ -57,7 +57,7 @@ export default async function AdminPage() {
 
 async function loadPlatformData() {
   const supabase = await createClient()
-  const [collegesResult, aliasesResult, requestsResult, plansResult, feedbackResult, teamResult, applicationsResult, adConfigResult, adCampaignsResult, auditResult] =
+  const [collegesResult, aliasesResult, requestsResult, plansResult, feedbackResult, teamResult, applicationsResult, adConfigResult, adCampaignsResult, auditResult, promoConfigResult] =
     await Promise.all([
       supabase
         .from("colleges")
@@ -86,6 +86,7 @@ async function loadPlatformData() {
         .is("sphere_id", null)
         .order("created_at", { ascending: false })
         .limit(50),
+      supabase.from("platform_config").select("value").eq("key", "promotion_payment").maybeSingle(),
     ])
 
   const aliasesByCollegeId: Record<string, string[]> = {}
@@ -148,6 +149,16 @@ async function loadPlatformData() {
       created_at: string
     }[],
     advertising: (adConfigResult.data as { contact_phone: string; contact_email: string } | null) ?? { contact_phone: "", contact_email: "" },
+    promotionPayment: (() => {
+      const v = (promoConfigResult.data?.value ?? {}) as Record<string, unknown>
+      return {
+        price_inr: Number(v.price_inr ?? 10),
+        duration_days: Number(v.duration_days ?? 1),
+        qr_image_url: typeof v.qr_image_url === "string" && v.qr_image_url ? v.qr_image_url : null,
+        upi_id: typeof v.upi_id === "string" && v.upi_id ? v.upi_id : null,
+        instructions: typeof v.instructions === "string" ? v.instructions : "",
+      }
+    })(),
     ads: (adCampaignsResult.data ?? []).map((row) => ({
       ...mapAdRow(row as Parameters<typeof mapAdRow>[0]),
       createdAt: row.created_at,

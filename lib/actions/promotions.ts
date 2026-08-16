@@ -27,18 +27,31 @@ export async function submitPromotionAction(formData: FormData): Promise<ActionR
     .maybeSingle()
   const price = Number(config?.value?.price_inr ?? 10)
 
-  const { error } = await supabase.from("promotions").insert({
-    sphere_id: member.sphereId,
-    user_id: member.userId,
-    url,
-    title,
-    status: "pending",
-    fee_status: price > 0 ? "due" : "free",
-  })
+  const { data: inserted, error } = await supabase
+    .from("promotions")
+    .insert({
+      sphere_id: member.sphereId,
+      user_id: member.userId,
+      url,
+      title,
+      status: "pending",
+      fee_status: price > 0 ? "due" : "free",
+    })
+    .select("id")
+    .single()
 
-  if (error) {
+  if (error || !inserted) {
     return { error: "Couldn't submit your promotion. Try again." }
   }
+
+  // Alert the Sphere's administrators so the request gets reviewed.
+  await supabase.rpc("notify_sphere_admins", {
+    p_sphere_id: member.sphereId,
+    p_type: "promotion_submitted",
+    p_title: "New promotion submitted",
+    p_body: `${member.anonymousHandle} submitted “${title}” for review${price > 0 ? " — payment required" : ""}.`,
+    p_link: "/dashboard/promotions/admin",
+  })
 
   revalidatePath("/dashboard/promotions")
   return { error: null }

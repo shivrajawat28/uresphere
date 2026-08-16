@@ -38,8 +38,8 @@ export function SubmitPromotionForm() {
           </Button>
         </form>
         <p className="mt-3 text-xs text-muted-foreground">
-          ₹10 per promotion (24 hours live). After submitting, pay via the QR shown and enter your UTR —
-          an admin verifies it before your link goes live.
+          After submitting, pay the promotion fee via the QR shown and enter your UTR — an admin verifies it
+          before your link goes live.
         </p>
       </CardContent>
     </Card>

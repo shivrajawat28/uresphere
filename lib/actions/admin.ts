@@ -163,7 +163,7 @@ export async function reviewPromotionAction(promotionId: string, status: "approv
 
   const { data: promo } = await supabase
     .from("promotions")
-    .select("id, sphere_id, fee_status")
+    .select("id, sphere_id, fee_status, user_id")
     .eq("id", promotionId)
     .maybeSingle()
   if (!promo) return { error: "Promotion not found." }
@@ -171,7 +171,13 @@ export async function reviewPromotionAction(promotionId: string, status: "approv
   const gate = await requireSphereAction(promo.sphere_id, "promotions.approve")
   if (!gate.ok) return gate
 
-  // Approving also settles payment verification when the user submitted a UTR.
+  // An admin can never accidentally approve a paid promotion without the
+  // payment: approving requires the fee to be settled (verified or free).
+  // A submitted UTR is settled at approval time.
+  if (status === "approved" && promo.fee_status === "due") {
+    return { error: "Payment not received — verify the UTR before approving." }
+  }
+
   const update: Record<string, string | null> = {
     status,
     reviewed_by: gate.member.userId,
@@ -184,8 +190,54 @@ export async function reviewPromotionAction(promotionId: string, status: "approv
   if (error) return { error: "Couldn't review the promotion." }
 
   await logAudit(supabase, gate.member.userId, promo.sphere_id, `promotion_${status}`, "promotion", promotionId)
+  await supabase.rpc("notify_user", {
+    p_user_id: promo.user_id,
+    p_type: status === "approved" ? "promotion_approved" : "promotion_rejected",
+    p_title: status === "approved" ? "Promotion approved" : "Promotion rejected",
+    p_body:
+      status === "approved"
+        ? "Your promotion is live in your Sphere."
+        : "Your promotion was rejected. You can submit a new one.",
+    p_link: "/dashboard/promotions",
+  })
   for (const p of spherePaths(promo.sphere_id)) revalidatePath(p)
   revalidatePath("/dashboard/promotions")
+  revalidatePath("/dashboard/promotions/admin")
+  return { error: null }
+}
+
+export async function updateEventAction(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const id = String(formData.get("id") ?? "")
+  const title = String(formData.get("title") ?? "").trim()
+  const description = String(formData.get("description") ?? "").trim()
+  const date = String(formData.get("date") ?? "")
+  const time = String(formData.get("time") ?? "") || null
+  const venue = String(formData.get("venue") ?? "").trim()
+  const organizer = String(formData.get("organizer") ?? "").trim()
+  const imageUrl = String(formData.get("imageUrl") ?? "").trim() || null
+
+  if (!id) return { error: "Missing event." }
+  if (title.length < 1 || title.length > 120) return { error: "Title must be 1–120 characters." }
+  if (!date) return { error: "Pick a date." }
+
+  const { data: event } = await supabase.from("events").select("id, sphere_id").eq("id", id).maybeSingle()
+  if (!event) return { error: "Event not found." }
+
+  const gate = await requireSphereAction(event.sphere_id, "events.update")
+  if (!gate.ok) return gate
+
+  const { error } = await supabase
+    .from("events")
+    .update({ title, description, event_date: date, event_time: time, venue, organizer, image_url: imageUrl })
+    .eq("id", id)
+  if (error) return { error: "Couldn't update the event." }
+
+  await logAudit(supabase, gate.member.userId, event.sphere_id, "event_updated", "event", id)
+  for (const p of spherePaths(event.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/events")
+  revalidatePath("/dashboard/events/admin")
   return { error: null }
 }
 

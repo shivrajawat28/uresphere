@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic"
 type Row = PromotionRow & {
   publisher: string
   hasPayment: boolean
+  utr: string | null
 }
 
 export default async function PromotionsPage() {
@@ -39,6 +40,7 @@ export default async function PromotionsPage() {
   const paymentConfig = (config?.value ?? {}) as {
     price_inr?: number
     qr_image_url?: string | null
+    upi_id?: string | null
     instructions?: string
     duration_days?: number
   }
@@ -57,6 +59,7 @@ export default async function PromotionsPage() {
     paid_at: p.paid_at,
     publisher: handleByUserId.get(p.user_id) ?? "Unknown",
     hasPayment: Boolean(p.utr || p.paid_at),
+    utr: p.utr ?? null,
   }))
 
   const mine = rows.filter((p) => p.user_id === member.userId)
@@ -192,12 +195,16 @@ export default async function PromotionsPage() {
                       )}
                     </div>
 
-                    {p.status === "pending" && (p.fee_status === "due" || p.fee_status === "free") && (
+                    {p.status === "pending" && p.fee_status !== "free" && (
                       <PaymentVerification
                         promotionId={p.id}
                         qrImageUrl={paymentConfig.qr_image_url ?? null}
                         instructions={paymentConfig.instructions ?? ""}
                         priceInr={price}
+                        upiId={paymentConfig.upi_id ?? null}
+                        feeStatus={p.fee_status}
+                        utr={p.utr}
+                        paidAt={p.paid_at}
                       />
                     )}
                   </CardContent>

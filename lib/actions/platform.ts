@@ -11,7 +11,7 @@ import {
   normalizeEmail,
   type ScopeFilter,
 } from "@/lib/validation"
-import { ASSIGNABLE_ROLES, ROLE_PERMISSION_PRESETS, type AssignableRole } from "@/lib/roles"
+import { ASSIGNABLE_ROLES, ROLE_LABELS, ROLE_PERMISSION_PRESETS, type AssignableRole } from "@/lib/roles"
 
 type ActionResult = { error: string | null }
 
@@ -925,6 +925,25 @@ export async function assignRoleAction(formData: FormData): Promise<ActionResult
   if (error) return { error: "Couldn't assign the role." }
 
   await logAudit(supabase, member.userId, sphereId, `role_assigned_${role}`, "role_assignment", targetUserId, { permissions: effectivePermissions, scope })
+
+  // Tell the assigned user their section-admin access is live. The RPC is
+  // SECURITY DEFINER, so this never trips the notifications RLS.
+  const { data: sphereName } = await supabase.from("spheres").select("name").eq("id", sphereId).maybeSingle()
+  const roleLabel = ROLE_LABELS[role as AssignableRole] ?? role.replace(/_/g, " ")
+  const roleLink: Record<string, string> = {
+    academic_manager: "/dashboard/academic/admin",
+    promotion_moderator: "/dashboard/promotions/admin",
+    event_manager: "/dashboard/events/admin",
+    social_moderator: "/dashboard/social/admin",
+  }
+  await supabase.rpc("notify_user", {
+    p_user_id: targetUserId,
+    p_type: "role_assigned",
+    p_title: `You're now a ${roleLabel}`,
+    p_body: `You can manage the ${roleLabel} area for ${sphereName?.name ?? "your Sphere"} from your dashboard.`,
+    p_link: roleLink[role] ?? "/dashboard",
+  })
+
   revalidatePath("/admin")
   revalidatePath(`/admin/spheres/${sphereId}`)
   revalidatePath(`/admin/spheres/${sphereId}/roles`)
@@ -970,19 +989,39 @@ export async function removeRoleAction(assignmentId: string): Promise<ActionResu
 // Promotion payment (QR/UTR) — user side
 // ---------------------------------------------------------------------------
 
+const UTR_PATTERN = /^[a-zA-Z0-9\- ]+$/
+
+/**
+ * Records the user's UTR / reference number against their own promotion.
+ * Idempotent: it is a plain UPDATE (never a second payment record), and
+ * re-submitting simply replaces the UTR while the promotion is still awaiting
+ * review or payment verification. Once paid / approved / rejected the payment
+ * fields are locked.
+ */
 export async function submitPromotionPaymentAction(promotionId: string, utr: string): Promise<ActionResult> {
   const member = await requireMember()
   const cleanUtr = utr.trim()
-  if (cleanUtr.length < 4 || cleanUtr.length > 40) return { error: "Enter the UTR/reference number (4–40 characters)." }
+  if (cleanUtr.length < 4 || cleanUtr.length > 40) {
+    return { error: "Enter the UTR/reference number (4–40 characters)." }
+  }
+  if (!UTR_PATTERN.test(cleanUtr)) {
+    return { error: "UTR/reference can only contain letters, numbers, spaces and hyphens." }
+  }
 
   const supabase = await createClient()
   const { data: promo } = await supabase
     .from("promotions")
-    .select("id, user_id, fee_status")
+    .select("id, user_id, sphere_id, fee_status, status")
     .eq("id", promotionId)
     .eq("user_id", member.userId)
     .maybeSingle()
   if (!promo) return { error: "Promotion not found." }
+  // Payment can only be submitted while the promotion is pending review and a
+  // fee is owed — never after approval / rejection / removal.
+  if (promo.status !== "pending") return { error: "This promotion is no longer awaiting payment." }
+  if (promo.fee_status !== "due" && promo.fee_status !== "payment_pending") {
+    return { error: "This promotion doesn't need a payment." }
+  }
 
   const { error } = await supabase
     .from("promotions")
@@ -990,6 +1029,123 @@ export async function submitPromotionPaymentAction(promotionId: string, utr: str
     .eq("id", promotionId)
   if (error) return { error: "Couldn't record your payment." }
 
+  await supabase.rpc("notify_sphere_admins", {
+    p_sphere_id: promo.sphere_id,
+    p_type: "promotion_payment_submitted",
+    p_title: "Promotion payment submitted",
+    p_body: `${member.anonymousHandle} submitted a UTR (${cleanUtr}) for their promotion — verify it in Promotions.`,
+    p_link: "/dashboard/promotions/admin",
+  })
+
   revalidatePath("/dashboard/promotions")
+  revalidatePath("/dashboard/promotions/admin")
+  return { error: null }
+}
+
+// ---------------------------------------------------------------------------
+// Promotion payment configuration (super admin only — platform level)
+// ---------------------------------------------------------------------------
+
+/**
+ * Saves the platform-wide promotion payment configuration (fee, QR image,
+ * UPI id, instructions, live duration). Only the super admin may change it;
+ * normal members and section admins never touch this.
+ */
+export async function updatePromotionPaymentConfigAction(formData: FormData): Promise<ActionResult> {
+  const admin = await requireAdmin()
+  if (admin.role !== "super_admin") return { error: "Only super admins can configure promotion payments." }
+  const supabase = await createClient()
+
+  const priceRaw = String(formData.get("priceInr") ?? "").trim()
+  const durationRaw = String(formData.get("durationDays") ?? "").trim()
+  const qrImageUrl = String(formData.get("qrImageUrl") ?? "").trim()
+  const upiId = String(formData.get("upiId") ?? "").trim()
+  const instructions = String(formData.get("instructions") ?? "").trim()
+
+  const priceInr = Number.parseFloat(priceRaw)
+  if (!Number.isFinite(priceInr) || priceInr < 0 || priceInr > 100000) {
+    return { error: "Enter a valid promotion fee (₹0–1,00,000)." }
+  }
+  const durationDays = Number.parseInt(durationRaw, 10)
+  if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 90) {
+    return { error: "Live duration must be 1–90 days." }
+  }
+  if (qrImageUrl && !/^https?:\/\//.test(qrImageUrl)) return { error: "QR image URL must be an http(s) URL." }
+  if (upiId && upiId.length > 120) return { error: "UPI ID is too long." }
+  if (instructions.length > 1000) return { error: "Instructions are too long." }
+
+  const { error } = await supabase.from("platform_config").upsert(
+    {
+      key: "promotion_payment",
+      value: {
+        price_inr: priceInr,
+        duration_days: durationDays,
+        qr_image_url: qrImageUrl || null,
+        upi_id: upiId || null,
+        instructions,
+      },
+    },
+    { onConflict: "key" },
+  )
+  if (error) return { error: "Couldn't save the payment configuration." }
+
+  await logAudit(supabase, admin.userId, null, "promotion_payment_config_updated", "platform_config", "promotion_payment", {
+    price_inr: priceInr,
+    duration_days: durationDays,
+    has_qr: Boolean(qrImageUrl),
+  })
+  revalidatePath("/admin")
+  revalidatePath("/dashboard/promotions")
+  return { error: null }
+}
+
+// ---------------------------------------------------------------------------
+// Promotion payment verification (sphere admins / promotion_moderator)
+// ---------------------------------------------------------------------------
+
+/**
+ * Explicitly marks a promotion's payment as verified without approving the
+ * promotion itself. Gated like review: the caller must hold
+ * `promotions.approve` in the promotion's Sphere (or be a Sphere admin).
+ */
+export async function verifyPromotionPaymentAction(promotionId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const { data: promo } = await supabase
+    .from("promotions")
+    .select("id, sphere_id, fee_status, user_id")
+    .eq("id", promotionId)
+    .maybeSingle()
+  if (!promo) return { error: "Promotion not found." }
+
+  const gate = await requireSphereAction(promo.sphere_id, "promotions.approve")
+  if (!gate.ok) return gate
+  if (promo.fee_status === "free") return { error: "This promotion has no fee to verify." }
+  if (promo.fee_status === "paid") return { error: "This payment is already verified." }
+  if (!promo.fee_status) return { error: "No payment to verify." }
+
+  const { error } = await supabase
+    .from("promotions")
+    .update({
+      fee_status: "paid",
+      reviewed_by: gate.member.userId,
+      paid_at: new Date().toISOString(),
+    })
+    .eq("id", promotionId)
+  if (error) return { error: "Couldn't verify the payment." }
+
+  await logAudit(supabase, gate.member.userId, promo.sphere_id, "promotion_payment_verified", "promotion", promotionId)
+  await supabase.rpc("notify_user", {
+    p_user_id: promo.user_id,
+    p_type: "promotion_payment_verified",
+    p_title: "Promotion payment verified",
+    p_body: "Your promotion payment was verified. It goes live once an admin approves it.",
+    p_link: "/dashboard/promotions",
+  })
+
+  revalidatePath("/admin")
+  revalidatePath(`/admin/spheres/${promo.sphere_id}`)
+  revalidatePath("/dashboard/promotions")
+  revalidatePath("/dashboard/promotions/admin")
   return { error: null }
 }

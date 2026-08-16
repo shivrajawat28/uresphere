@@ -41,6 +41,7 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
     messagesResult,
     groupsResult,
     rolesResult,
+    promoConfigResult,
   ] = await Promise.all([
     supabase
       .from("user_spheres")
@@ -67,7 +68,7 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
       .limit(100),
     supabase
       .from("promotions")
-      .select("id, title, url, status, fee_status, user_id, created_at")
+      .select("id, title, url, status, fee_status, utr, user_id, created_at, reviewed_at, paid_at")
       .eq("sphere_id", sphereId)
       .order("created_at", { ascending: false })
       .limit(100),
@@ -132,6 +133,7 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
       .select("user_id, role, scope")
       .eq("sphere_id", sphereId)
       .limit(300),
+    supabase.from("platform_config").select("value").eq("key", "promotion_payment").maybeSingle(),
   ])
 
   const userRows = usersResult.data ?? []
@@ -178,6 +180,18 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
     : { data: [] as { user_id: string; anonymous_handle: string }[] }
   const handleById = new Map((handleRows ?? []).map((h) => [h.user_id, h.anonymous_handle]))
   const creatorHandle = new Map((handleRows ?? []).map((h) => [h.user_id, h.anonymous_handle]))
+
+  // Anonymous handles for promotion requesters (same-Sphere only).
+  const promoUserIds = Array.from(new Set((promotionsResult.data ?? []).map((p) => p.user_id)))
+  const { data: promoHandleRows } = promoUserIds.length
+    ? await supabase.from("user_spheres").select("user_id, anonymous_handle").in("user_id", promoUserIds)
+    : { data: [] as { user_id: string; anonymous_handle: string }[] }
+  const promoHandleById = new Map((promoHandleRows ?? []).map((h) => [h.user_id, h.anonymous_handle]))
+
+  const promotionPaymentConfig = (promoConfigResult.data?.value ?? {}) as {
+    price_inr?: number
+    duration_days?: number
+  }
 
   // Original content of deleted messages lives in chat_message_archives
   // (RLS-gated to Sphere admins / super admins) — moderation-only.
@@ -227,9 +241,14 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
         url: p.url,
         status: p.status,
         fee_status: p.fee_status,
+        utr: p.utr ?? null,
         user_id: p.user_id,
+        publisher: promoHandleById.get(p.user_id) ?? "Unknown",
         created_at: p.created_at,
+        reviewed_at: p.reviewed_at,
+        paid_at: p.paid_at,
       }))}
+      promotionPriceInr={promotionPaymentConfig.price_inr ?? 10}
       listings={(listingsResult.data ?? []).map((l) => ({
         id: l.id,
         title: l.title,

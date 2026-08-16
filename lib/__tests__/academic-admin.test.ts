@@ -368,9 +368,12 @@ describe("assignRoleAction — academic_manager sections", () => {
     const upsert = vi.fn().mockResolvedValue({ error: null })
     const from = vi.fn((table: string) => {
       if (table === "role_assignments") return { upsert }
+      if (table === "spheres") {
+        return { select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: { name: "ITS" }, error: null }) }) }) }
+      }
       return {}
     })
-    vi.mocked(createClient).mockReturnValue({ from } as never)
+    vi.mocked(createClient).mockReturnValue({ from, rpc: vi.fn().mockResolvedValue({ error: null }) } as never)
 
     const fd = new FormData()
     fd.set("userId", "u9")
@@ -394,8 +397,14 @@ describe("assignRoleAction — academic_manager sections", () => {
   it("ignores sections for non-academic roles (no scope leakage)", async () => {
     vi.mocked(requireMember).mockResolvedValue({ ...MEMBER, role: "super_admin" } as never)
     const upsert = vi.fn().mockResolvedValue({ error: null })
-    const from = vi.fn((table: string) => (table === "role_assignments" ? { upsert } : {}))
-    vi.mocked(createClient).mockReturnValue({ from } as never)
+    const from = vi.fn((table: string) => {
+      if (table === "role_assignments") return { upsert }
+      if (table === "spheres") {
+        return { select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: { name: "ITS" }, error: null }) }) }) }
+      }
+      return {}
+    })
+    vi.mocked(createClient).mockReturnValue({ from, rpc: vi.fn().mockResolvedValue({ error: null }) } as never)
 
     const fd = new FormData()
     fd.set("userId", "u9")

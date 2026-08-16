@@ -43,6 +43,18 @@ type Assignment = {
   created_at: string
 }
 
+// Section-level roles manage exactly one section of the Sphere — no academic
+// degree/year/branch taxonomy applies. The section IS the role.
+const SECTION_SCOPE_HINTS: Partial<Record<AssignableRole, string>> = {
+  promotion_moderator: "Manages the Promotions section of this Sphere (review submissions, verify payments, approve links).",
+  event_manager: "Manages the Events section of this Sphere (create, edit and remove events).",
+  social_moderator: "Manages the Social section of this Sphere (moderate chat, reports and groups).",
+  club_manager: "Manages the Clubs section of this Sphere.",
+  marketplace_moderator: "Manages the Marketplace section of this Sphere (orders and moderation).",
+  listing_manager: "Manages Marketplace listings of this Sphere.",
+  academic_manager: "Scoped to the academic sections you pick below — blank fields cover everything.",
+}
+
 export function RolesClient({
   sphereId,
   sphereName,
@@ -299,6 +311,9 @@ export function RolesClient({
             <p className="text-xs text-muted-foreground">
               sphere_admin = full administration inside this Sphere. Managers get only their section (and scope below).
             </p>
+            {SECTION_SCOPE_HINTS[role] && (
+              <p className="text-xs text-muted-foreground/80">{SECTION_SCOPE_HINTS[role]}</p>
+            )}
           </div>
 
           {role === "academic_manager" && (

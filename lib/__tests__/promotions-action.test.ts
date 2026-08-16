@@ -21,14 +21,21 @@ import { submitPromotionAction } from "@/lib/actions/promotions"
 const member = { userId: "u1", sphereId: "s1" }
 
 function makeSupabaseMock() {
-  const insert = vi.fn().mockResolvedValue({ error: null })
+  // submitPromotionAction now reads the inserted row back (select id, single)
+  // so it can notify the Sphere's admins.
+  const insert = vi.fn().mockReturnValue({
+    select: vi.fn().mockReturnValue({
+      single: vi.fn().mockResolvedValue({ data: { id: "p1" }, error: null }),
+    }),
+  })
   const select = vi.fn().mockReturnValue({
     eq: vi.fn().mockReturnValue({
       maybeSingle: vi.fn().mockResolvedValue({ data: { value: { price_inr: 10 } }, error: null }),
     }),
   })
   const insertBuilder = { insert, select }
-  return { insertBuilder, insert, select }
+  const rpc = vi.fn().mockResolvedValue({ error: null })
+  return { insertBuilder, insert, select, rpc }
 }
 
 beforeEach(() => {
@@ -38,7 +45,7 @@ beforeEach(() => {
 describe("submitPromotionAction", () => {
   it("rejects javascript: URLs without touching the database", async () => {
     const { insert } = makeSupabaseMock()
-    vi.mocked(createClient).mockReturnValue({ from: () => ({ insert }) } as never)
+    vi.mocked(createClient).mockReturnValue({ from: () => ({ insert }), rpc: vi.fn() } as never)
 
     const formData = new FormData()
     formData.set("title", "Hack")
@@ -51,7 +58,7 @@ describe("submitPromotionAction", () => {
 
   it("rejects URLs with embedded credentials", async () => {
     const { insert } = makeSupabaseMock()
-    vi.mocked(createClient).mockReturnValue({ from: () => ({ insert }) } as never)
+    vi.mocked(createClient).mockReturnValue({ from: () => ({ insert }), rpc: vi.fn() } as never)
 
     const formData = new FormData()
     formData.set("title", "Phish")
@@ -64,7 +71,7 @@ describe("submitPromotionAction", () => {
 
   it("rejects missing title and missing URL", async () => {
     const { insert } = makeSupabaseMock()
-    vi.mocked(createClient).mockReturnValue({ from: () => ({ insert }) } as never)
+    vi.mocked(createClient).mockReturnValue({ from: () => ({ insert }), rpc: vi.fn() } as never)
 
     const noTitle = new FormData()
     noTitle.set("url", "https://example.com")
@@ -78,8 +85,8 @@ describe("submitPromotionAction", () => {
   })
 
   it("submits a valid URL scoped to the member's Sphere with a due fee", async () => {
-    const { insertBuilder, insert } = makeSupabaseMock()
-    vi.mocked(createClient).mockReturnValue({ from: () => insertBuilder } as never)
+    const { insertBuilder, insert, rpc } = makeSupabaseMock()
+    vi.mocked(createClient).mockReturnValue({ from: () => insertBuilder, rpc } as never)
 
     const formData = new FormData()
     formData.set("title", "Hostel fest")
@@ -96,13 +103,13 @@ describe("submitPromotionAction", () => {
   })
 
   it("defaults to the ₹10 fee when the payment config is missing", async () => {
-    const { insertBuilder, insert, select } = makeSupabaseMock()
+    const { insertBuilder, insert, select, rpc } = makeSupabaseMock()
     select.mockReturnValue({
       eq: vi.fn().mockReturnValue({
         maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
       }),
     })
-    vi.mocked(createClient).mockReturnValue({ from: () => insertBuilder } as never)
+    vi.mocked(createClient).mockReturnValue({ from: () => insertBuilder, rpc } as never)
 
     const formData = new FormData()
     formData.set("title", "Campus sale")

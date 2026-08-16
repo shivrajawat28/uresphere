@@ -29,18 +29,27 @@ import {
   MoreHorizontal,
   Milestone,
   GraduationCap,
+  CalendarCheck2,
+  MessagesSquare,
 } from "lucide-react"
 
 type NavLink = { href: string; label: string; icon: typeof LayoutGrid; badge?: number }
 
+export type SectionAdminFlags = {
+  academic?: boolean
+  promotions?: boolean
+  events?: boolean
+  social?: boolean
+}
+
 export function DashboardNav({
   member,
   initialUnread = 0,
-  isAcademicManager = false,
+  sectionAdmins = {},
 }: {
   member: CurrentMember
   initialUnread?: number
-  isAcademicManager?: boolean
+  sectionAdmins?: SectionAdminFlags
 }) {
   const pathname = usePathname()
   const [unread, setUnread] = useState(initialUnread)
@@ -63,6 +72,9 @@ export function DashboardNav({
         links: [
           { href: "/dashboard", label: "Overview", icon: LayoutGrid },
           { href: "/dashboard/chat", label: "Sphere Chat", icon: MessageCircle },
+          ...(sectionAdmins.social
+            ? [{ href: "/dashboard/social/admin", label: "Social Admin", icon: MessagesSquare }]
+            : []),
           { href: "/dashboard/groups", label: "Groups", icon: Users },
         ],
       },
@@ -70,10 +82,13 @@ export function DashboardNav({
         label: "Campus",
         links: [
           { href: "/dashboard/academic", label: "Academic", icon: BookOpen },
-          ...(isAcademicManager
+          ...(sectionAdmins.academic
             ? [{ href: "/dashboard/academic/admin", label: "Academic Admin", icon: GraduationCap }]
             : []),
           { href: "/dashboard/events", label: "Events", icon: CalendarDays },
+          ...(sectionAdmins.events
+            ? [{ href: "/dashboard/events/admin", label: "Events Admin", icon: CalendarCheck2 }]
+            : []),
           { href: "/dashboard/clubs", label: "Clubs", icon: Sparkles },
         ],
       },
@@ -81,6 +96,9 @@ export function DashboardNav({
         label: "Community",
         links: [
           { href: "/dashboard/promotions", label: "Promotions", icon: Megaphone },
+          ...(sectionAdmins.promotions
+            ? [{ href: "/dashboard/promotions/admin", label: "Promotions Admin", icon: ShieldAlert }]
+            : []),
           { href: "/dashboard/marketplace", label: "Marketplace", icon: ShoppingBag },
         ],
       },
@@ -95,7 +113,7 @@ export function DashboardNav({
         ],
       },
     ],
-    [unread, isAcademicManager],
+    [unread, sectionAdmins],
   )
 
   // Mobile bottom bar — the four most-used destinations.
@@ -114,19 +132,28 @@ export function DashboardNav({
     () => [
       { href: "/dashboard/groups", label: "Groups", icon: Users },
       { href: "/dashboard/promotions", label: "Promotions", icon: Megaphone },
+      ...(sectionAdmins.promotions
+        ? [{ href: "/dashboard/promotions/admin", label: "Promotions Admin", icon: ShieldAlert }]
+        : []),
       { href: "/dashboard/academic", label: "Academic", icon: BookOpen },
-      { href: "/dashboard/events", label: "Events", icon: CalendarDays },
-      { href: "/dashboard/clubs", label: "Clubs", icon: Sparkles },
-      { href: "/dashboard/global-listings", label: "Global Listings", icon: Globe },
-      ...(isAcademicManager
+      ...(sectionAdmins.academic
         ? [{ href: "/dashboard/academic/admin", label: "Academic Admin", icon: GraduationCap }]
         : []),
+      { href: "/dashboard/events", label: "Events", icon: CalendarDays },
+      ...(sectionAdmins.events
+        ? [{ href: "/dashboard/events/admin", label: "Events Admin", icon: CalendarCheck2 }]
+        : []),
+      { href: "/dashboard/clubs", label: "Clubs", icon: Sparkles },
+      ...(sectionAdmins.social
+        ? [{ href: "/dashboard/social/admin", label: "Social Admin", icon: MessagesSquare }]
+        : []),
+      { href: "/dashboard/global-listings", label: "Global Listings", icon: Globe },
       { href: "/dashboard/premium", label: "Premium", icon: Gem },
       { href: "/dashboard/roadmap", label: "Roadmap", icon: Milestone },
       { href: "/dashboard/settings", label: "Profile & settings", icon: Settings },
       { href: "/dashboard/about", label: "About", icon: Orbit },
     ],
-    [isAcademicManager],
+    [sectionAdmins],
   )
 
   // Keep the unread badge live without polling (RLS delivers only own rows).
