@@ -18,7 +18,7 @@ import {
 import { deleteMessageAction } from "@/lib/actions/chat"
 import { adminDeleteGroupAction } from "@/lib/actions/groups"
 import { createClient } from "@/lib/supabase/client"
-import { mergeChatMessages, type ChatMessage } from "@/lib/chat"
+import { deletedMessageLabel, mergeChatMessages, type ChatMessage, type DeletedByRole } from "@/lib/chat"
 import { TAB_PERMISSION } from "@/lib/roles"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -51,7 +51,11 @@ type GroupRow = {
   createdAt: string
 }
 type ReportRow = { id: string; target_type: string; reason: string; status: string; created_at: string; reporter_id: string }
-type SocialMessage = ChatMessage & { authorRealName?: string | null }
+type SocialMessage = ChatMessage & {
+  authorRealName?: string | null
+  // Admin-only original content of deleted messages (chat_message_archives).
+  originalBody?: string | null
+}
 type PromotionRow = { id: string; title: string; url: string; status: string; fee_status: string; user_id: string; created_at: string }
 type ListingRow = { id: string; title: string; price_cents: number; category: string; status: string; seller_id: string }
 type EventRow = { id: string; title: string; event_date: string; event_time: string | null; venue: string; organizer: string }
@@ -142,6 +146,8 @@ export function SphereAdmin({
             author_id: string
             created_at: string
             is_deleted: boolean
+            deleted_by_role: string | null
+            reply_to_message_id: string | null
           }
           const cached = handleCache.current.get(row.author_id)
           let handle = cached ?? "Unknown"
@@ -162,6 +168,8 @@ export function SphereAdmin({
                 authorId: row.author_id,
                 createdAt: row.created_at,
                 isDeleted: row.is_deleted,
+                deletedByRole: (row.deleted_by_role as DeletedByRole | null) ?? null,
+                replyToMessageId: row.reply_to_message_id ?? null,
                 authorHandle: handle,
               },
             ]),
@@ -172,10 +180,43 @@ export function SphereAdmin({
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "chat_messages", filter: `sphere_id=eq.${sphereId}` },
         (payload) => {
-          const row = payload.new as { id: string; is_deleted: boolean }
+          const row = payload.new as { id: string; is_deleted: boolean; deleted_by_role: string | null }
           setLiveMessages((prev) =>
-            prev.map((m) => (m.id === row.id ? { ...m, isDeleted: row.is_deleted } : m)),
+            prev.map((m) =>
+              m.id === row.id
+                ? {
+                    ...m,
+                    isDeleted: row.is_deleted,
+                    deletedByRole: (row.deleted_by_role as DeletedByRole | null) ?? m.deletedByRole,
+                  }
+                : m,
+            ),
           )
+          // When a message gets deleted, fetch its archived original for the
+          // moderation view (RLS gates this to admins).
+          if (row.is_deleted) {
+            supabase
+              .from("chat_message_archives")
+              .select("body")
+              .eq("message_id", row.id)
+              .maybeSingle()
+              .then(({ data }) => {
+                if (data?.body) {
+                  setLiveMessages((cur) =>
+                    cur.map((m) => (m.id === row.id ? { ...m, originalBody: data.body } : m)),
+                  )
+                }
+              })
+          }
+        },
+      )
+      // 24h retention purge hard-deletes rows; drop them from the admin list.
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "chat_messages", filter: `sphere_id=eq.${sphereId}` },
+        (payload) => {
+          const old = payload.old as { id: string }
+          setLiveMessages((prev) => prev.filter((m) => m.id !== old.id))
         },
       )
       .subscribe()
@@ -189,7 +230,13 @@ export function SphereAdmin({
       const result = await deleteMessageAction(id)
       if (result.error) toast.error(result.error)
       else {
-        setLiveMessages((prev) => prev.map((m) => (m.id === id ? { ...m, isDeleted: true } : m)))
+        setLiveMessages((prev) =>
+          prev.map((m) =>
+            m.id === id
+              ? { ...m, isDeleted: true, deletedByRole: result.deletedByRole ?? "admin" }
+              : m,
+          ),
+        )
         toast.success("Message removed.")
       }
     })
@@ -402,8 +449,14 @@ export function SphereAdmin({
                             </span>
                           </div>
                           <p className={`mt-0.5 text-sm ${m.isDeleted ? "italic text-muted-foreground" : "text-foreground"}`}>
-                            {m.isDeleted ? "Message deleted by admin" : m.body}
+                            {m.isDeleted ? deletedMessageLabel(true, m.deletedByRole) ?? "Message deleted" : m.body}
                           </p>
+                          {m.isDeleted && m.originalBody && (
+                            <p className="mt-1 max-w-full truncate rounded bg-destructive/5 px-2 py-1 text-xs text-muted-foreground">
+                              <span className="mr-1 font-medium">Original (admin-only):</span>
+                              {m.originalBody}
+                            </p>
+                          )}
                         </div>
                         {!m.isDeleted && (
                           <Button

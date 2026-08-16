@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { computeScrollAnchor, mergeChatMessages, replaceOptimisticMessage, selectInitialWindow } from "@/lib/chat"
+import {
+  computeScrollAnchor,
+  deletedMessageLabel,
+  mergeChatMessages,
+  replaceOptimisticMessage,
+  selectInitialWindow,
+} from "@/lib/chat"
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
@@ -10,7 +16,7 @@ vi.mock("next/cache", () => ({
 }))
 
 import { createClient } from "@/lib/supabase/server"
-import { sendMessageAction } from "@/lib/actions/chat"
+import { sendMessageAction, deleteMessageAction } from "@/lib/actions/chat"
 
 function msg(id: string, createdAt: string, extra: Partial<Parameters<typeof mergeChatMessages>[0][number]> = {}) {
   return { id, body: "hello", authorId: "u2", createdAt, isDeleted: false, authorHandle: "@Other", ...extra }
@@ -39,6 +45,34 @@ describe("mergeChatMessages", () => {
     ])
     expect(next.map((m) => m.id)).toEqual(["m1", "m2", "m3"])
   })
+
+  it("carries reply + deletion metadata through merges", () => {
+    const next = mergeChatMessages([], [
+      msg("m1", "2026-01-01T10:00:00Z", {
+        replyToMessageId: "orig-1",
+        isDeleted: true,
+        deletedByRole: "admin",
+      }),
+    ])
+    expect(next[0].replyToMessageId).toBe("orig-1")
+    expect(next[0].deletedByRole).toBe("admin")
+  })
+})
+
+describe("deletedMessageLabel", () => {
+  it("returns null for non-deleted messages", () => {
+    expect(deletedMessageLabel(false, null)).toBeNull()
+    expect(deletedMessageLabel(false, "admin")).toBeNull()
+  })
+
+  it("attributes user deletions to the user", () => {
+    expect(deletedMessageLabel(true, "user")).toBe("Message deleted by user")
+    expect(deletedMessageLabel(true, null)).toBe("Message deleted by user")
+  })
+
+  it("attributes admin deletions to the admin", () => {
+    expect(deletedMessageLabel(true, "admin")).toBe("Message deleted by admin")
+  })
 })
 
 describe("replaceOptimisticMessage", () => {
@@ -56,6 +90,12 @@ describe("replaceOptimisticMessage", () => {
     const next = replaceOptimisticMessage([optimistic, server], optimistic.id, server)
     expect(next.map((m) => m.id)).toEqual(["real-1"])
     expect(next).toHaveLength(1)
+  })
+
+  it("keeps reply metadata on the server-acknowledged message", () => {
+    const withReply = { ...server, replyToMessageId: "orig-1" }
+    const next = replaceOptimisticMessage([optimistic], optimistic.id, withReply)
+    expect(next[0].replyToMessageId).toBe("orig-1")
   })
 })
 
@@ -120,48 +160,58 @@ describe("computeScrollAnchor", () => {
 describe("sendMessageAction", () => {
   const memberUser = { id: "u1", email: "a@b.c" }
 
+  /**
+   * Flexible chat_messages chain: every builder call returns the chain, and
+   * maybeSingle() returns the row matching the columns the query selected.
+   */
   function makeSupabaseMock({
     isMember = true,
     lastMessage = null,
     insertedRow = { id: "m-new", created_at: "2026-01-01T10:05:00Z" },
+    replyTarget = null,
   }: {
     isMember?: boolean
     lastMessage?: { created_at: string } | null
     insertedRow?: { id: string; created_at: string }
+    replyTarget?: { id: string; sphere_id: string; is_deleted: boolean } | null
   } = {}) {
     const insert = vi.fn().mockReturnValue({
       select: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: insertedRow, error: null }) }),
     })
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: null })
     const from = vi.fn((table: string) => {
-      if (table === "user_spheres") {
-        return {
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({
-                eq: vi.fn().mockReturnValue({
-                  maybeSingle: vi.fn().mockResolvedValue({ data: isMember ? { sphere_id: "s1" } : null, error: null }),
-                }),
-              }),
-            }),
-          }),
-        }
-      }
-      return {
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              order: vi.fn().mockReturnValue({
-                limit: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: lastMessage, error: null }) }),
-              }),
-            }),
-          }),
+      let selectedCols = ""
+      const chain = {
+        select: vi.fn((cols?: string) => {
+          selectedCols = String(cols ?? "")
+          return chain
         }),
+        eq: vi.fn(() => chain),
+        order: vi.fn(() => chain),
+        limit: vi.fn(() => chain),
         insert,
+        maybeSingle: vi.fn(async () => {
+          if (table === "user_spheres") {
+            return { data: isMember ? { sphere_id: "s1" } : null, error: null }
+          }
+          if (table === "profiles") {
+            return { data: { role: "user", account_status: "active" }, error: null }
+          }
+          if (selectedCols === "id, sphere_id, is_deleted") {
+            return { data: replyTarget, error: null }
+          }
+          if (selectedCols === "author_id, sphere_id") {
+            return { data: replyTarget, error: null }
+          }
+          return { data: lastMessage, error: null }
+        }),
       }
+      return chain
     })
     return {
       from,
       insert,
+      rpc,
       auth: { getUser: vi.fn().mockResolvedValue({ data: { user: memberUser }, error: null }) },
     }
   }
@@ -222,5 +272,169 @@ describe("sendMessageAction", () => {
     const result = await sendMessageAction(formData)
     expect(result.error).toMatch(/too quickly/i)
     expect(mock.insert).not.toHaveBeenCalled()
+  })
+
+  it("persists a reply reference to a same-Sphere message", async () => {
+    const mock = makeSupabaseMock({
+      replyTarget: { id: "orig-1", sphere_id: "s1", is_deleted: false },
+    })
+    vi.mocked(createClient).mockReturnValue(mock as never)
+
+    const formData = new FormData()
+    formData.set("body", "yes it starts at 10am")
+    formData.set("sphereId", "s1")
+    formData.set("replyToMessageId", "orig-1")
+
+    const result = await sendMessageAction(formData)
+    expect(result.error).toBeNull()
+    expect(mock.insert.mock.calls[0][0]).toMatchObject({ reply_to_message_id: "orig-1" })
+  })
+
+  it("rejects a reply whose target belongs to another Sphere", async () => {
+    const mock = makeSupabaseMock({
+      replyTarget: { id: "orig-1", sphere_id: "s-other", is_deleted: false },
+    })
+    vi.mocked(createClient).mockReturnValue(mock as never)
+
+    const formData = new FormData()
+    formData.set("body", "cross-sphere reply")
+    formData.set("sphereId", "s1")
+    formData.set("replyToMessageId", "orig-1")
+
+    const result = await sendMessageAction(formData)
+    expect(result.error).toMatch(/only reply to messages in this Sphere/i)
+    expect(mock.insert).not.toHaveBeenCalled()
+  })
+
+  it("rejects a reply to a deleted message", async () => {
+    const mock = makeSupabaseMock({
+      replyTarget: { id: "orig-1", sphere_id: "s1", is_deleted: true },
+    })
+    vi.mocked(createClient).mockReturnValue(mock as never)
+
+    const formData = new FormData()
+    formData.set("body", "reply to deleted")
+    formData.set("sphereId", "s1")
+    formData.set("replyToMessageId", "orig-1")
+
+    const result = await sendMessageAction(formData)
+    expect(result.error).toMatch(/deleted message/i)
+    expect(mock.insert).not.toHaveBeenCalled()
+  })
+
+  it("rejects a reply to a message that no longer exists", async () => {
+    const mock = makeSupabaseMock({ replyTarget: null })
+    vi.mocked(createClient).mockReturnValue(mock as never)
+
+    const formData = new FormData()
+    formData.set("body", "reply to ghost")
+    formData.set("sphereId", "s1")
+    formData.set("replyToMessageId", "ghost-id")
+
+    const result = await sendMessageAction(formData)
+    expect(result.error).toMatch(/no longer exists/i)
+    expect(mock.insert).not.toHaveBeenCalled()
+  })
+})
+
+describe("deleteMessageAction", () => {
+  const memberUser = { id: "u1", email: "a@b.c" }
+
+  function makeSupabaseMock({
+    message = null,
+    isAdminProfile = false,
+    rpcError = null,
+  }: {
+    message?: { author_id: string; sphere_id: string } | null
+    isAdminProfile?: boolean
+    rpcError?: { message: string } | null
+  } = {}) {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: rpcError })
+    const from = vi.fn((table: string) => {
+      let selectedCols = ""
+      const chain = {
+        select: vi.fn((cols?: string) => {
+          selectedCols = String(cols ?? "")
+          return chain
+        }),
+        eq: vi.fn(() => chain),
+        order: vi.fn(() => chain),
+        limit: vi.fn(() => chain),
+        maybeSingle: vi.fn(async () => {
+          if (table === "user_spheres") {
+            return { data: isAdminProfile ? { sphere_id: "s1" } : null, error: null }
+          }
+          if (table === "profiles") {
+            return {
+              data: isAdminProfile ? { role: "admin", account_status: "active" } : { role: "user", account_status: "active" },
+              error: null,
+            }
+          }
+          if (selectedCols === "author_id, sphere_id") {
+            return { data: message, error: null }
+          }
+          return { data: null, error: null }
+        }),
+      }
+      return chain
+    })
+    return {
+      from,
+      rpc,
+      auth: { getUser: vi.fn().mockResolvedValue({ data: { user: memberUser }, error: null }) },
+    }
+  }
+
+  beforeEach(() => {
+    vi.mocked(createClient).mockReset()
+  })
+
+  it("lets the message owner delete their own message and reports deletedByRole 'user'", async () => {
+    const mock = makeSupabaseMock({ message: { author_id: "u1", sphere_id: "s1" } })
+    vi.mocked(createClient).mockReturnValue(mock as never)
+
+    const result = await deleteMessageAction("m1")
+    expect(result.error).toBeNull()
+    expect(result.deletedByRole).toBe("user")
+    expect(mock.rpc).toHaveBeenCalledWith("delete_chat_message", { p_message_id: "m1" })
+  })
+
+  it("lets an admin delete another user's message and reports deletedByRole 'admin'", async () => {
+    const mock = makeSupabaseMock({ message: { author_id: "u2", sphere_id: "s1" }, isAdminProfile: true })
+    vi.mocked(createClient).mockReturnValue(mock as never)
+
+    const result = await deleteMessageAction("m1")
+    expect(result.error).toBeNull()
+    expect(result.deletedByRole).toBe("admin")
+    expect(mock.rpc).toHaveBeenCalledWith("delete_chat_message", { p_message_id: "m1" })
+  })
+
+  it("denies a plain user deleting another user's message", async () => {
+    const mock = makeSupabaseMock({ message: { author_id: "u2", sphere_id: "s1" }, isAdminProfile: false })
+    vi.mocked(createClient).mockReturnValue(mock as never)
+
+    const result = await deleteMessageAction("m1")
+    expect(result.error).toMatch(/only delete your own/i)
+    expect(mock.rpc).not.toHaveBeenCalled()
+  })
+
+  it("denies deleting a message that does not exist", async () => {
+    const mock = makeSupabaseMock({ message: null })
+    vi.mocked(createClient).mockReturnValue(mock as never)
+
+    const result = await deleteMessageAction("ghost")
+    expect(result.error).toMatch(/not found/i)
+    expect(mock.rpc).not.toHaveBeenCalled()
+  })
+
+  it("surfaces RPC failures instead of silently succeeding", async () => {
+    const mock = makeSupabaseMock({
+      message: { author_id: "u1", sphere_id: "s1" },
+      rpcError: { message: "boom" },
+    })
+    vi.mocked(createClient).mockReturnValue(mock as never)
+
+    const result = await deleteMessageAction("m1")
+    expect(result.error).toBeTruthy()
   })
 })

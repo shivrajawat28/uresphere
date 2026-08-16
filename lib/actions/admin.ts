@@ -670,10 +670,10 @@ export async function adminDeleteChatMessageAction(messageId: string): Promise<A
   const gate = await requireSphereAction(message.sphere_id, "social.delete_message")
   if (!gate.ok) return gate
 
-  const { error } = await supabase
-    .from("chat_messages")
-    .update({ is_deleted: true, deleted_by: gate.member.userId })
-    .eq("id", messageId)
+  // Deletion flows through the SECURITY DEFINER RPC so the original content
+  // is archived for moderation and the actor is resolved server-side (the
+  // RPC will classify this as an admin delete).
+  const { error } = await supabase.rpc("delete_chat_message", { p_message_id: messageId })
   if (error) return { error: "Couldn't delete the message." }
 
   await logAudit(supabase, gate.member.userId, message.sphere_id, "message_removed", "chat_message", messageId)

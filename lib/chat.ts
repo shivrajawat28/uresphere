@@ -1,13 +1,33 @@
 // Pure helpers for Sphere chat message state. Kept dependency-free so they are
 // unit-testable and shared between the user ChatRoom and the admin Social tab.
 
+export type DeletedByRole = "user" | "admin"
+
 export type ChatMessage = {
   id: string
   body: string
   authorId: string
   createdAt: string
   isDeleted: boolean
+  /** Who removed the message: the message owner ("user") or a Sphere admin
+   * ("admin"). Written server-side only — never trusted from the client.
+   * Null for messages that were never deleted. */
+  deletedByRole?: DeletedByRole | null
+  /** id of the message this one replies to (same Sphere only). Null when the
+   * message is not a reply. */
+  replyToMessageId?: string | null
   authorHandle: string
+}
+
+/**
+ * Display label for a deleted message. Returns null when the message is not
+ * deleted; otherwise "Message deleted by user"/"Message deleted by admin".
+ * Legacy rows without a stored role render as "deleted by admin" (the old
+ * UI's behaviour).
+ */
+export function deletedMessageLabel(isDeleted: boolean, deletedByRole?: DeletedByRole | null): string | null {
+  if (!isDeleted) return null
+  return deletedByRole === "admin" ? "Message deleted by admin" : "Message deleted by user"
 }
 
 /**

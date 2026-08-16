@@ -16,7 +16,7 @@ export default async function ChatPage() {
   // messages exist (hasMore) without loading the full history.
   const { data: messages } = await supabase
     .from("chat_messages")
-    .select("id, body, author_id, created_at, is_deleted")
+    .select("id, body, author_id, created_at, is_deleted, deleted_by_role, reply_to_message_id")
     .eq("sphere_id", member.sphereId)
     .order("created_at", { ascending: false })
     .limit(WINDOW + 1)
@@ -36,6 +36,8 @@ export default async function ChatPage() {
       authorId: m.author_id,
       createdAt: m.created_at,
       isDeleted: m.is_deleted,
+      deletedByRole: m.deleted_by_role === "admin" ? ("admin" as const) : ("user" as const),
+      replyToMessageId: m.reply_to_message_id ?? null,
       authorHandle: handleMap.get(m.author_id) ?? "Unknown",
     })),
     WINDOW,

@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { sendMessageAction, deleteMessageAction, reportMessageAction } from "@/lib/actions/chat"
-import { computeScrollAnchor, mergeChatMessages, replaceOptimisticMessage, type ChatMessage } from "@/lib/chat"
+import {
+  computeScrollAnchor,
+  deletedMessageLabel,
+  mergeChatMessages,
+  replaceOptimisticMessage,
+  type ChatMessage,
+  type DeletedByRole,
+} from "@/lib/chat"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -15,17 +22,20 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog"
 import { toast } from "sonner"
 import {
+  CornerUpLeft,
+  Flag,
+  Loader2,
   MessageCircle,
   MoreVertical,
-  Trash2,
-  Flag,
   SendHorizontal,
   ShieldCheck,
   ChevronUp,
-  Loader2,
+  Trash2,
+  X,
 } from "lucide-react"
 
 const PAGE_SIZE = 50
+const LONG_PRESS_MS = 500
 
 export function ChatRoom({
   sphereId,
@@ -53,11 +63,19 @@ export function ChatRoom({
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [draft, setDraft] = useState("")
   const [isPending, startTransition] = useTransition()
+  const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<ChatMessage | null>(null)
   const [reportTarget, setReportTarget] = useState<string | null>(null)
   const [reportReason, setReportReason] = useState("")
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [highlightedId, setHighlightedId] = useState<string | null>(null)
+  // Reply targets that fell outside the loaded window are fetched here (batched
+  // into a single query) so reply previews never cause N+1 lookups.
+  const [replyCache, setReplyCache] = useState<Record<string, ChatMessage>>({})
   const scrollRef = useRef<HTMLDivElement>(null)
   const handleCache = useRef(new Map<string, string>())
   const subscribedSphere = useRef<string | null>(null)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // The server loads only the newest window, so the very first thing we do on
   // open is jump to the bottom (instantly, no smooth scroll-through of
   // history). Runs once per mount — closing and reopening the chat always
@@ -148,6 +166,8 @@ export function ChatRoom({
             author_id: string
             created_at: string
             is_deleted: boolean
+            deleted_by_role: string | null
+            reply_to_message_id: string | null
           }
           if (row.author_id === currentUserId) {
             // The sender's own message may still be pending as an optimistic
@@ -179,6 +199,8 @@ export function ChatRoom({
                 authorId: row.author_id,
                 createdAt: row.created_at,
                 isDeleted: row.is_deleted,
+                deletedByRole: (row.deleted_by_role as DeletedByRole | null) ?? null,
+                replyToMessageId: row.reply_to_message_id ?? null,
                 authorHandle: handle,
               },
             ]),
@@ -189,8 +211,30 @@ export function ChatRoom({
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "chat_messages", filter: `sphere_id=eq.${sphereId}` },
         (payload) => {
-          const row = payload.new as { id: string; is_deleted: boolean }
-          setMessages((prev) => prev.map((m) => (m.id === row.id ? { ...m, isDeleted: row.is_deleted } : m)))
+          const row = payload.new as { id: string; is_deleted: boolean; deleted_by_role: string | null }
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === row.id
+                ? { ...m, isDeleted: row.is_deleted, deletedByRole: (row.deleted_by_role as DeletedByRole | null) ?? m.deletedByRole }
+                : m,
+            ),
+          )
+        },
+      )
+      // The 24-hour retention purge hard-deletes rows; connected clients must
+      // drop them from the list (no reload, no realtime errors).
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "chat_messages", filter: `sphere_id=eq.${sphereId}` },
+        (payload) => {
+          const old = payload.old as { id: string }
+          setMessages((prev) => prev.filter((m) => m.id !== old.id))
+          setReplyCache((prev) => {
+            if (!(old.id in prev)) return prev
+            const next = { ...prev }
+            delete next[old.id]
+            return next
+          })
         },
       )
       .subscribe()
@@ -201,14 +245,86 @@ export function ChatRoom({
     }
   }, [sphereId, currentUserId, resolveHandle])
 
+  // Batch-fetch reply targets that are not in the loaded window (single query
+  // per batch — no N+1 for reply previews).
+  const missingReplyIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const m of messages) {
+      if (m.replyToMessageId && !messages.some((x) => x.id === m.replyToMessageId) && !(m.replyToMessageId in replyCache)) {
+        ids.add(m.replyToMessageId)
+      }
+    }
+    return Array.from(ids)
+  }, [messages, replyCache])
+
+  useEffect(() => {
+    if (missingReplyIds.length === 0) return
+    let cancelled = false
+    const supabase = createClient()
+    ;(async () => {
+      const { data } = await supabase
+        .from("chat_messages")
+        .select("id, body, author_id, created_at, is_deleted, deleted_by_role")
+        .in("id", missingReplyIds)
+      if (cancelled || !data || data.length === 0) return
+      const authorIds = Array.from(new Set(data.map((r) => r.author_id)))
+      const handleMap = new Map<string, string>()
+      if (authorIds.length > 0) {
+        const { data: handles } = await supabase
+          .from("user_spheres")
+          .select("user_id, anonymous_handle")
+          .in("user_id", authorIds)
+        for (const h of handles ?? []) {
+          handleMap.set(h.user_id, h.anonymous_handle)
+          handleCache.current.set(h.user_id, h.anonymous_handle)
+        }
+      }
+      setReplyCache((prev) => {
+        const next = { ...prev }
+        for (const r of data) {
+          next[r.id] = {
+            id: r.id,
+            body: r.body,
+            authorId: r.author_id,
+            createdAt: r.created_at,
+            isDeleted: r.is_deleted,
+            deletedByRole: (r.deleted_by_role as DeletedByRole | null) ?? null,
+            authorHandle: handleMap.get(r.author_id) ?? "Unknown",
+          }
+        }
+        return next
+      })
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [missingReplyIds])
+
+  function resolveReplyTarget(id: string): ChatMessage | null {
+    return messages.find((m) => m.id === id) ?? replyCache[id] ?? null
+  }
+
+  function scrollToMessage(id: string) {
+    const el = scrollRef.current?.querySelector<HTMLElement>(`[data-message-id="${id}"]`)
+    if (!el) {
+      toast.info("That message isn't loaded right now.")
+      return
+    }
+    el.scrollIntoView({ behavior: "smooth", block: "center" })
+    setHighlightedId(id)
+    setTimeout(() => setHighlightedId((cur) => (cur === id ? null : cur)), 1800)
+  }
+
   function handleSend(e: React.FormEvent) {
     e.preventDefault()
     const body = draft.trim()
     if (!body) return
 
+    const replyingTo = replyTarget
     const formData = new FormData()
     formData.set("body", body)
     formData.set("sphereId", sphereId ?? "")
+    if (replyingTo) formData.set("replyToMessageId", replyingTo.id)
     setDraft("")
 
     // Optimistic bubble: the sender sees their message instantly. The temp id
@@ -222,6 +338,7 @@ export function ChatRoom({
           authorId: currentUserId,
           createdAt: new Date().toISOString(),
           isDeleted: false,
+          replyToMessageId: replyingTo?.id ?? null,
           authorHandle: currentHandle,
         },
       ]),
@@ -235,6 +352,7 @@ export function ChatRoom({
         setMessages((prev) => prev.filter((m) => m.id !== optimisticId))
         return
       }
+      setReplyTarget(null)
       if (result.message) {
         setMessages((prev) =>
           replaceOptimisticMessage(prev, optimisticId, {
@@ -243,6 +361,7 @@ export function ChatRoom({
             authorId: currentUserId,
             createdAt: result.message!.createdAt,
             isDeleted: false,
+            replyToMessageId: replyingTo?.id ?? null,
             authorHandle: currentHandle,
           }),
         )
@@ -273,7 +392,7 @@ export function ChatRoom({
       const supabase = createClient()
       const { data, error } = await supabase
         .from("chat_messages")
-        .select("id, body, author_id, created_at, is_deleted")
+        .select("id, body, author_id, created_at, is_deleted, deleted_by_role, reply_to_message_id")
         .eq("sphere_id", sphereId)
         .lt("created_at", oldestCreatedAt)
         .order("created_at", { ascending: false })
@@ -301,6 +420,8 @@ export function ChatRoom({
         authorId: r.author_id,
         createdAt: r.created_at,
         isDeleted: r.is_deleted,
+        deletedByRole: (r.deleted_by_role as DeletedByRole | null) ?? null,
+        replyToMessageId: r.reply_to_message_id ?? null,
         authorHandle: handleMap.get(r.author_id) ?? "Unknown",
       }))
       setMessages((prev) => mergeChatMessages(prev, older))
@@ -330,12 +451,21 @@ export function ChatRoom({
     }
   }
 
-  function handleDelete(id: string) {
+  function confirmDelete() {
+    if (!deleteTarget) return
+    const id = deleteTarget.id
+    setDeleteTarget(null)
     startTransition(async () => {
       const result = await deleteMessageAction(id)
       if (result.error) toast.error(result.error)
       else {
-        setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, isDeleted: true } : m)))
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === id
+              ? { ...m, isDeleted: true, deletedByRole: result.deletedByRole ?? "user", body: "" }
+              : m,
+          ),
+        )
         toast.success("Message removed.")
       }
     })
@@ -355,6 +485,19 @@ export function ChatRoom({
       setReportTarget(null)
       setReportReason("")
     })
+  }
+
+  // Long-press (touch) opens the message action menu; a short tap or a drag
+  // (scrolling) cancels it. Desktop keeps hover + click.
+  function startLongPress(id: string) {
+    if (typeof window === "undefined" || !window.matchMedia("(pointer: coarse)").matches) return
+    longPressTimer.current = setTimeout(() => setOpenMenuId(id), LONG_PRESS_MS)
+  }
+  function cancelLongPress() {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
   }
 
   const sorted = useMemo(() => mergeChatMessages([], messages), [messages])
@@ -386,8 +529,20 @@ export function ChatRoom({
           )}
           {sorted.map((m) => {
             const isSelf = m.authorId === currentUserId
+            const deletedLabel = deletedMessageLabel(m.isDeleted, m.deletedByRole)
+            const replyTo = m.replyToMessageId ? resolveReplyTarget(m.replyToMessageId) : null
             return (
-              <div key={m.id} className={`group flex flex-col ${isSelf ? "items-end" : "items-start"}`}>
+              <div
+                key={m.id}
+                data-message-id={m.id}
+                className={`group flex flex-col ${isSelf ? "items-end" : "items-start"} ${
+                  highlightedId === m.id ? "rounded-xl bg-primary/10 ring-1 ring-primary/40" : ""
+                }`}
+                onPointerDown={() => startLongPress(m.id)}
+                onPointerUp={cancelLongPress}
+                onPointerMove={cancelLongPress}
+                onPointerLeave={cancelLongPress}
+              >
                 <div className="mb-1 flex items-center gap-2 px-1">
                   <span className="font-mono text-[11px] text-muted-foreground">
                     {isSelf ? currentHandle : m.authorHandle}
@@ -406,34 +561,84 @@ export function ChatRoom({
                           : "bg-secondary text-foreground"
                     }`}
                   >
-                    {m.isDeleted ? "Message deleted by admin" : m.body}
+                    {m.replyToMessageId && !m.isDeleted && (
+                      <button
+                        type="button"
+                        onClick={() => scrollToMessage(m.replyToMessageId!)}
+                        className={`mb-1.5 flex w-full max-w-full items-start gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs transition ${
+                          isSelf
+                            ? "bg-white/15 text-primary-foreground/90 hover:bg-white/25"
+                            : "bg-background/70 text-muted-foreground hover:bg-background"
+                        }`}
+                        aria-label={replyTo && !replyTo.isDeleted ? `Jump to the message you replied to` : "Reply target no longer available"}
+                      >
+                        <CornerUpLeft className="mt-0.5 size-3 shrink-0 opacity-70" aria-hidden="true" />
+                        <span className="min-w-0">
+                          {!replyTo ? (
+                            <span className="italic">Message no longer available</span>
+                          ) : replyTo.isDeleted ? (
+                            <span className="italic">Message deleted</span>
+                          ) : (
+                            <>
+                              <span className={`mr-1.5 font-mono text-[10px] font-medium ${isSelf ? "text-primary-foreground/80" : "text-primary"}`}>
+                                {replyTo.authorHandle}
+                              </span>
+                              <span className="line-clamp-2 break-words">{replyTo.body}</span>
+                            </>
+                          )}
+                        </span>
+                      </button>
+                    )}
+                    {deletedLabel ?? m.body}
                   </div>
-                  {!m.isDeleted && (isSelf || isAdmin) && (
-                    <DropdownMenu>
+                  {!m.isDeleted && (
+                    <DropdownMenu open={openMenuId === m.id} onOpenChange={(open) => setOpenMenuId(open ? m.id : null)}>
                       <DropdownMenuTrigger asChild>
                         <button
-                          className="mt-1 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+                          className="mt-1 rounded p-1 text-muted-foreground transition hover:text-foreground md:opacity-0 md:group-hover:opacity-100"
                           aria-label="Message options"
                         >
                           <MoreVertical className="size-3.5" />
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align={isSelf ? "end" : "start"}>
-                        <DropdownMenuItem onClick={() => handleDelete(m.id)} className="gap-2 text-destructive">
-                          <Trash2 className="size-3.5" />
-                          {isAdmin && !isSelf ? "Remove (admin)" : "Delete"}
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setReplyTarget(m)
+                            setOpenMenuId(null)
+                          }}
+                          className="gap-2"
+                        >
+                          <CornerUpLeft className="size-3.5" />
+                          Reply
                         </DropdownMenuItem>
+                        {(isSelf || isAdmin) && (
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setDeleteTarget(m)
+                              setOpenMenuId(null)
+                            }}
+                            variant="destructive"
+                            className="gap-2"
+                          >
+                            <Trash2 className="size-3.5" />
+                            {isAdmin && !isSelf ? "Remove (admin)" : "Delete"}
+                          </DropdownMenuItem>
+                        )}
+                        {!isSelf && !isAdmin && (
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setReportTarget(m.id)
+                              setOpenMenuId(null)
+                            }}
+                            className="gap-2"
+                          >
+                            <Flag className="size-3.5" />
+                            Report
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
-                  )}
-                  {!m.isDeleted && !isSelf && !isAdmin && (
-                    <button
-                      onClick={() => setReportTarget(m.id)}
-                      className="mt-1 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
-                      aria-label="Report message"
-                    >
-                      <Flag className="size-3.5" />
-                    </button>
                   )}
                 </div>
               </div>
@@ -443,25 +648,68 @@ export function ChatRoom({
       </div>
 
       <form onSubmit={handleSend} className="border-t border-border px-4 py-4 md:px-8">
-        <div className="mx-auto flex max-w-2xl items-end gap-2">
-          <Textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={`Message ${sphereName} as ${currentHandle}...`}
-            rows={1}
-            maxLength={1000}
-            className="min-h-11 flex-1 resize-none bg-secondary/40"
-          />
-          <Button type="submit" size="icon" disabled={isPending || !draft.trim()} aria-label="Send message">
-            <SendHorizontal className="size-4" />
-          </Button>
+        <div className="mx-auto max-w-2xl">
+          {replyTarget && (
+            <div className="mb-2 flex items-start gap-2 rounded-lg border border-border/70 bg-secondary/40 px-3 py-2">
+              <CornerUpLeft className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-medium text-muted-foreground">
+                  Replying to {replyTarget.authorHandle}
+                </p>
+                <p className="truncate text-xs text-foreground/80">
+                  {replyTarget.isDeleted ? "Message deleted" : replyTarget.body}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReplyTarget(null)}
+                className="shrink-0 rounded p-1 text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+                aria-label="Cancel reply"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          )}
+          <div className="flex items-end gap-2">
+            <Textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={replyTarget ? `Reply to ${replyTarget.authorHandle}...` : `Message ${sphereName} as ${currentHandle}...`}
+              rows={1}
+              maxLength={1000}
+              className="min-h-11 flex-1 resize-none bg-secondary/40"
+            />
+            <Button type="submit" size="icon" disabled={isPending || !draft.trim()} aria-label="Send message">
+              <SendHorizontal className="size-4" />
+            </Button>
+          </div>
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            <ShieldCheck className="mr-1 inline size-3" />
+            Sent as {currentHandle}. Visible only to {sphereName}.
+          </p>
         </div>
-        <p className="mx-auto mt-2 max-w-2xl text-[11px] text-muted-foreground">
-          <ShieldCheck className="mr-1 inline size-3" />
-          Sent as {currentHandle}. Visible only to {sphereName}.
-        </p>
       </form>
+
+      <Dialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete this message?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            The message will be removed for everyone in {sphereName}. Original content stays visible to Sphere
+            admins for moderation and is permanently deleted after 24 hours.
+          </p>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button variant="destructive" onClick={confirmDelete} disabled={isPending}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={reportTarget !== null} onOpenChange={(open) => !open && setReportTarget(null)}>
         <DialogContent>

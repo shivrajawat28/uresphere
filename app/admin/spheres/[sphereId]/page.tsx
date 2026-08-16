@@ -117,7 +117,7 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
       .limit(50),
     supabase
       .from("chat_messages")
-      .select("id, body, author_id, created_at, is_deleted")
+      .select("id, body, author_id, created_at, is_deleted, deleted_by_role, reply_to_message_id")
       .eq("sphere_id", sphereId)
       .order("created_at", { ascending: false })
       .limit(50),
@@ -178,6 +178,17 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
     : { data: [] as { user_id: string; anonymous_handle: string }[] }
   const handleById = new Map((handleRows ?? []).map((h) => [h.user_id, h.anonymous_handle]))
   const creatorHandle = new Map((handleRows ?? []).map((h) => [h.user_id, h.anonymous_handle]))
+
+  // Original content of deleted messages lives in chat_message_archives
+  // (RLS-gated to Sphere admins / super admins) — moderation-only.
+  const deletedMessageIds = (messagesResult.data ?? []).filter((m) => m.is_deleted).map((m) => m.id)
+  const { data: archiveRows } = deletedMessageIds.length
+    ? await supabase
+        .from("chat_message_archives")
+        .select("message_id, body")
+        .in("message_id", deletedMessageIds)
+    : { data: [] as { message_id: string; body: string }[] }
+  const archiveByMessageId = new Map((archiveRows ?? []).map((a) => [a.message_id, a.body]))
 
   // Member roles for the member-details modal (role_assignments are admin-scoped).
   const rolesByUser = new Map<string, { role: string; scope: Record<string, unknown> }[]>()
@@ -280,6 +291,9 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
         authorRealName: realNameById.get(m.author_id) ?? null,
         createdAt: m.created_at,
         isDeleted: m.is_deleted,
+        deletedByRole: m.deleted_by_role === "admin" ? ("admin" as const) : ("user" as const),
+        replyToMessageId: m.reply_to_message_id ?? null,
+        originalBody: archiveByMessageId.get(m.id) ?? null,
       }))}
       groups={(groupsResult.data ?? []).map((g) => ({
         id: g.id,

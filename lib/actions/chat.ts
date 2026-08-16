@@ -32,6 +32,7 @@ export type SentMessage = { id: string; createdAt: string }
 export async function sendMessageAction(formData: FormData): Promise<{ error: string | null; message?: SentMessage }> {
   const body = String(formData.get("body") || "").trim()
   const sphereId = String(formData.get("sphereId") || "")
+  const replyToMessageId = String(formData.get("replyToMessageId") || "").trim() || null
 
   const bodyError = validateMessageBody(body)
   if (bodyError) return { error: bodyError }
@@ -48,6 +49,20 @@ export async function sendMessageAction(formData: FormData): Promise<{ error: st
   // active member of this Sphere (defense in depth behind RLS).
   if (!(await isSphereMember(supabase, user.id, sphereId))) {
     return { error: "You're not a member of this Sphere." }
+  }
+
+  // Reply references are validated server-side: the target must exist, must
+  // belong to THIS Sphere (never a cross-Sphere reference from a client id)
+  // and must not be deleted. The DB trigger re-enforces the same-Sphere rule.
+  if (replyToMessageId) {
+    const { data: target } = await supabase
+      .from("chat_messages")
+      .select("id, sphere_id, is_deleted")
+      .eq("id", replyToMessageId)
+      .maybeSingle()
+    if (!target) return { error: "The message you're replying to no longer exists." }
+    if (target.sphere_id !== sphereId) return { error: "You can only reply to messages in this Sphere." }
+    if (target.is_deleted) return { error: "You can't reply to a deleted message." }
   }
 
   // Basic server-side rate limiting: reject if the user's last message
@@ -74,6 +89,7 @@ export async function sendMessageAction(formData: FormData): Promise<{ error: st
       sphere_id: sphereId,
       author_id: user.id,
       body,
+      ...(replyToMessageId ? { reply_to_message_id: replyToMessageId } : {}),
     })
     .select("id, created_at")
     .single()
@@ -89,7 +105,9 @@ export async function sendMessageAction(formData: FormData): Promise<{ error: st
   return { error: null, message: { id: inserted.id, createdAt: inserted.created_at } }
 }
 
-export async function deleteMessageAction(messageId: string): Promise<{ error: string | null }> {
+export async function deleteMessageAction(
+  messageId: string,
+): Promise<{ error: string | null; deletedByRole?: "user" | "admin" }> {
   const supabase = await createClient()
   const {
     data: { user },
@@ -98,7 +116,9 @@ export async function deleteMessageAction(messageId: string): Promise<{ error: s
   if (!user) return { error: "Not signed in." }
 
   // Authors may delete their own messages; Sphere admins may remove any
-  // message in their Sphere. Anything else is rejected server-side.
+  // message in their Sphere. Anything else is rejected server-side (and again
+  // inside the SECURITY DEFINER RPC, which is the only writer of
+  // deleted_by / deleted_by_role).
   const { data: message } = await supabase
     .from("chat_messages")
     .select("author_id, sphere_id")
@@ -111,10 +131,9 @@ export async function deleteMessageAction(messageId: string): Promise<{ error: s
   const isAdmin = await isSphereAdmin(supabase, user.id, message.sphere_id)
   if (!isAuthor && !isAdmin) return { error: "You can only delete your own messages." }
 
-  const { error } = await supabase
-    .from("chat_messages")
-    .update({ is_deleted: true, deleted_by: user.id })
-    .eq("id", messageId)
+  // Deletion runs through the RPC: it archives the original content for
+  // admins, blanks the public body, and resolves the actor server-side.
+  const { error } = await supabase.rpc("delete_chat_message", { p_message_id: messageId })
 
   if (error) {
     console.log("[v0] deleteMessage error:", error.message)
@@ -122,7 +141,9 @@ export async function deleteMessageAction(messageId: string): Promise<{ error: s
   }
 
   revalidatePath("/dashboard/chat")
-  return { error: null }
+  // Mirror the RPC's actor resolution so the sender's UI updates instantly:
+  // message owner → "user" (even if they're also an admin), otherwise admin.
+  return { error: null, deletedByRole: isAuthor ? "user" : "admin" }
 }
 
 export async function reportMessageAction(formData: FormData): Promise<{ error: string | null }> {

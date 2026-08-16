@@ -116,20 +116,154 @@ update public.marketplace_listings set status = 'sold' where title = 'My book';
 select (select status from public.marketplace_listings limit 1) = 'sold' as owner_can_update;
 reset role;
 
--- ── 6. RLS: chat ownership (silent filter) ─────────────────────────────────
-select '6. chat ownership' as test;
+-- ── 6. Chat delete attribution (migration 0008) ────────────────────────────
+select '6. chat delete attribution' as test;
+
+-- Give Bob a message so an admin-delete of a NON-author row can be tested.
+reset role;
+insert into public.chat_messages (sphere_id, author_id, body)
+select id, '22222222-2222-2222-2222-222222222222', 'bob message' from public.spheres where slug = 'its';
+
+-- Bob (plain member, NOT the author) cannot delete Alice's message via RPC.
 set role authenticated;
 set app.uid = '22222222-2222-2222-2222-222222222222';
-update public.chat_messages set is_deleted = true;
+do $$
+declare
+  v_msg uuid;
+  v_err text;
+begin
+  select id into v_msg from public.chat_messages where author_id = '11111111-1111-1111-1111-111111111111' limit 1;
+  begin
+    perform public.delete_chat_message(v_msg);
+    v_err := 'none';
+  exception when others then
+    v_err := sqlerrm;
+  end;
+  if v_err = 'none' then
+    raise exception 'FAIL: non-author delete allowed';
+  end if;
+  if v_err not like '%own messages%' then
+    raise exception 'FAIL: unexpected error: %', v_err;
+  end if;
+end $$;
 reset role;
-select (select count(*) from public.chat_messages where is_deleted) = 0 as non_author_cannot_soft_delete;
 
--- Author can soft-delete own message.
+-- Bob cannot forge deleted_by / deleted_by_role via a direct UPDATE either
+-- (migration 0008 removed author-level UPDATE; only Sphere admins may update).
+set role authenticated;
+set app.uid = '22222222-2222-2222-2222-222222222222';
+update public.chat_messages set deleted_by_role = 'admin' where author_id = '11111111-1111-1111-1111-111111111111';
+reset role;
+select (select count(*) from public.chat_messages where deleted_by_role = 'admin') = 0 as author_cannot_forge_deleted_by_role;
+
+-- Admin (Alice, super_admin) deletes Bob's message → attributed to ADMIN.
 set role authenticated;
 set app.uid = '11111111-1111-1111-1111-111111111111';
-update public.chat_messages set is_deleted = true where author_id = '11111111-1111-1111-1111-111111111111';
-select (select count(*) from public.chat_messages where is_deleted) = 1 as author_can_soft_delete_own;
+select public.delete_chat_message((select id from public.chat_messages where author_id = '22222222-2222-2222-2222-222222222222' limit 1));
 reset role;
+select (select deleted_by_role from public.chat_messages where author_id = '22222222-2222-2222-2222-222222222222') = 'admin' as admin_delete_attributed_to_admin,
+       (select body from public.chat_messages where author_id = '22222222-2222-2222-2222-222222222222') = '' as admin_deleted_body_blanked;
+
+-- Author (Alice) deletes her OWN message → attributed to USER.
+set role authenticated;
+set app.uid = '11111111-1111-1111-1111-111111111111';
+select public.delete_chat_message((select id from public.chat_messages where author_id = '11111111-1111-1111-1111-111111111111' limit 1));
+reset role;
+select (select count(*) from public.chat_message_archives) = 2 as archives_created,
+       (select deleted_by_role from public.chat_message_archives where author_id = '11111111-1111-1111-1111-111111111111') = 'user' as archive_user_role,
+       (select deleted_by_role from public.chat_message_archives where author_id = '22222222-2222-2222-2222-222222222222') = 'admin' as archive_admin_role;
+
+-- Normal users cannot read archived deleted content; they only see the
+-- blanked public body.
+set role authenticated;
+set app.uid = '22222222-2222-2222-2222-222222222222';  -- Bob: plain member
+select (select count(*) from public.chat_message_archives) = 0 as member_cannot_read_archives,
+       (select body from public.chat_messages where is_deleted limit 1) = '' as member_sees_blanked_body;
+reset role;
+
+-- Cross-Sphere admin (Carol, DTU) cannot read ITS archives.
+set role authenticated;
+set app.uid = '33333333-3333-3333-3333-333333333333';
+select (select count(*) from public.chat_message_archives) = 0 as cross_sphere_admin_cannot_read_archives;
+reset role;
+
+-- Same-Sphere admin (Alice, super) CAN read archives.
+set role authenticated;
+set app.uid = '11111111-1111-1111-1111-111111111111';
+select (select count(*) from public.chat_message_archives) = 2 as admin_reads_archives;
+reset role;
+
+-- ── 6b. Replies (migration 0008) ───────────────────────────────────────────
+select '6b. replies' as test;
+reset role;
+insert into public.chat_messages (sphere_id, author_id, body)
+select id, '11111111-1111-1111-1111-111111111111', 'tomorrow event?' from public.spheres where slug = 'its';
+
+-- Same-Sphere reply by Dana (ITS member) works.
+set role authenticated;
+set app.uid = '44444444-4444-4444-4444-444444444444';
+insert into public.chat_messages (sphere_id, author_id, body, reply_to_message_id)
+select id, '44444444-4444-4444-4444-444444444444', 'yes 10am',
+       (select id from public.chat_messages where body = 'tomorrow event?')
+from public.spheres where slug = 'its';
+select (select count(*) from public.chat_messages where reply_to_message_id is not null) = 1 as same_sphere_reply_allowed;
+
+-- Cross-Sphere reply is blocked by the DB trigger even with a client-supplied
+-- id. Run as postgres so the DTU target id actually resolves: a normal ITS
+-- member cannot even read the DTU message (RLS), so the trigger is the second
+-- line of defense and must reject the reference outright.
+reset role;
+do $$
+begin
+  begin
+    insert into public.chat_messages (sphere_id, author_id, body, reply_to_message_id)
+    select id, '44444444-4444-4444-4444-444444444444', 'cross sphere',
+           (select id from public.chat_messages where author_id = '33333333-3333-3333-3333-333333333333' and body = 'hello dtu' limit 1)
+    from public.spheres where slug = 'its';
+    raise exception 'FAIL: cross-sphere reply allowed';
+  exception when others then
+    if sqlerrm like '%FAIL%' then raise; end if;
+  end;
+end $$;
+select (select count(*) from public.chat_messages where body = 'cross sphere') = 0 as cross_sphere_reply_blocked;
+
+-- ── 6c. 24h retention (migration 0008) ─────────────────────────────────────
+select '6c. 24h retention' as test;
+reset role;
+
+-- expires_at is exactly created_at + 24 hours (immutable generated column).
+select (select expires_at = created_at + interval '24 hours' from public.chat_messages where body = 'tomorrow event?') as expires_at_is_created_plus_24h;
+
+-- One expired (25h old) and one fresh (1h old) message. The fresh message's
+-- id/created_at are pinned in psql variables (its body gets blanked on delete).
+insert into public.chat_messages (sphere_id, author_id, body, created_at)
+select id, '11111111-1111-1111-1111-111111111111', 'old message', now() - interval '25 hours'
+from public.spheres where slug = 'its';
+insert into public.chat_messages (sphere_id, author_id, body, created_at)
+select id, '11111111-1111-1111-1111-111111111111', 'fresh message', now() - interval '1 hour'
+from public.spheres where slug = 'its';
+select id as fresh_msg_id, created_at as fresh_msg_created
+from public.chat_messages where body = 'fresh message' \gset
+select (select count(*) from public.chat_messages where expires_at < now()) = 1 as exactly_one_expired;
+
+-- Deleting a message does NOT extend its lifetime: created_at (and therefore
+-- expires_at) is untouched by the RPC.
+set role authenticated;
+set app.uid = '11111111-1111-1111-1111-111111111111';
+select public.delete_chat_message(:'fresh_msg_id');
+reset role;
+select (select expires_at = created_at + interval '24 hours' from public.chat_messages where id = :'fresh_msg_id') as delete_does_not_extend_lifetime,
+       (select created_at = :'fresh_msg_created'::timestamptz from public.chat_messages where id = :'fresh_msg_id') as created_at_not_rewritten;
+
+-- Purge removes ONLY expired rows (idempotent, batch-safe) and cascades
+-- archives / nulls reply references — no orphans remain.
+select (select count(*) from public.chat_messages where body = 'old message') = 1 as expired_present_before_purge;
+select public.purge_expired_chat_messages(10) >= 1 as purge_removed_expired;
+select (select count(*) from public.chat_messages where expires_at < now()) = 0 as no_expired_rows_remain;
+select (select count(*) from public.chat_messages where body = 'old message') = 0 as expired_message_gone;
+select (select count(*) from public.chat_messages where id = :'fresh_msg_id') = 1 as fresh_message_survives;
+select (select count(*) from public.chat_message_archives a
+        where not exists (select 1 from public.chat_messages m where m.id = a.message_id)) = 0 as no_orphan_archives;
 
 -- ── 7. Groups: membership gating ───────────────────────────────────────────
 select '7. group membership' as test;
