@@ -25,9 +25,25 @@ export function latestPublishedPlan(plans: Plan[]): Plan | null {
   })[0]
 }
 
-/** Stable anchor used by plan notification links (dedupe key + scroll target). */
+/**
+ * Stable link used by plan notification broadcasts — both the dedupe key in
+ * notify_plan_published and the deep link users land on. Opens the exact plan
+ * on the Dashboard Roadmap page (the page scrolls to + highlights it).
+ */
 export function planAnchor(planId: string): string {
-  return `/dashboard#plan-${planId}`
+  return `/dashboard/roadmap?plan=${planId}`
+}
+
+/**
+ * Extracts the plan UUID from a roadmap deep link (e.g. a plan_published
+ * notification's `link` column or the roadmap page's `?plan=` param). Returns
+ * null when the href isn't a roadmap deep link. Keeps the notification → plan
+ * routing contract in one dependency-free helper.
+ */
+export function planIdFromRoadmapHref(href: string | null | undefined): string | null {
+  if (!href) return null
+  const match = href.match(/\/dashboard\/roadmap\?plan=([0-9a-f-]{36})/i)
+  return match ? match[1] : null
 }
 
 /**

@@ -429,6 +429,7 @@ export async function upsertPlanAction(formData: FormData): Promise<ActionResult
 
   revalidatePath("/")
   revalidatePath("/dashboard")
+  revalidatePath("/dashboard/roadmap")
   revalidatePath("/admin")
   return { error: null }
 }
@@ -443,6 +444,7 @@ export async function deletePlanAction(planId: string): Promise<ActionResult> {
 
   revalidatePath("/")
   revalidatePath("/admin")
+  revalidatePath("/dashboard/roadmap")
   return { error: null }
 }
 
@@ -456,6 +458,17 @@ export async function submitPlanFeedbackAction(
   const cleanComment = comment.trim().slice(0, 600)
 
   const supabase = await createClient()
+  // Only published plans accept feedback. Drafts / deleted plans are invisible
+  // to members (RLS only exposes active rows) and must never be ratable — this
+  // is the server-side backstop for the UI + RLS.
+  const { data: plan } = await supabase
+    .from("platform_plans")
+    .select("id")
+    .eq("id", planId)
+    .eq("active", true)
+    .maybeSingle()
+  if (!plan) return { error: "This plan isn't accepting feedback right now." }
+
   const { error } = await supabase.from("plan_feedback").upsert(
     { plan_id: planId, user_id: member.userId, rating, comment: cleanComment, updated_at: new Date().toISOString() },
     { onConflict: "plan_id,user_id" },
@@ -464,6 +477,7 @@ export async function submitPlanFeedbackAction(
 
   revalidatePath("/")
   revalidatePath("/dashboard")
+  revalidatePath("/dashboard/roadmap")
   return { error: null }
 }
 

@@ -144,8 +144,10 @@ try {
   await mpage.getByRole("button", { name: "More" }).click()
   const moreVisible = await mpage.getByRole("dialog", { name: "More navigation" }).isVisible().catch(() => false)
   check("More sheet opens", moreVisible)
-  const reachable = await mpage.getByRole("link", { name: /Groups|Promotions|Academic|Events|Clubs|Premium|Global Listings/ }).count()
-  check("More sheet exposes remaining sections", reachable >= 4, `${reachable} links`)
+  const reachable = await mpage.getByRole("link", { name: /Groups|Promotions|Academic|Events|Clubs|Premium|Global Listings|Roadmap/ }).count()
+  check("More sheet exposes remaining sections (incl. Roadmap)", reachable >= 4, `${reachable} links`)
+  const roadmapInMore = (await mpage.getByRole("link", { name: "Roadmap" }).count()) > 0
+  check("More sheet includes Roadmap", roadmapInMore)
 
   // Clicking a nav item closes the sheet (Groups)
   await mpage.getByRole("link", { name: /Groups/ }).first().click()
@@ -160,6 +162,11 @@ try {
   for (const g of groups) {
     check(`Sidebar group present: ${g}`, (await dpage.getByText(g, { exact: true }).count()) > 0)
   }
+  check("Sidebar includes Roadmap link", (await dpage.getByRole("link", { name: "Roadmap" }).count()) > 0)
+  await dpage.goto(`${APP_URL}/dashboard/roadmap`, { waitUntil: "domcontentloaded" })
+  await dpage.waitForTimeout(1200)
+  const roadmapHeader = await dpage.getByText("Help shape what's coming next.", { exact: false }).count()
+  check("Dashboard Roadmap page loads (authenticated)", roadmapHeader > 0, dpage.url())
   await dctx.close()
   await mctx.close()
 

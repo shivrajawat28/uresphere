@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { latestPublishedPlan, planAnchor, type Plan } from "@/lib/plans"
+import { latestPublishedPlan, planAnchor, planIdFromRoadmapHref, type Plan } from "@/lib/plans"
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
@@ -46,18 +46,42 @@ describe("latestPublishedPlan", () => {
 })
 
 describe("planAnchor", () => {
-  it("produces the dashboard anchor used by notification links (dedupe key)", () => {
-    expect(planAnchor("abc")).toBe("/dashboard#plan-abc")
+  it("produces the dashboard roadmap deep link used by notification links (dedupe key)", () => {
+    expect(planAnchor("abc")).toBe("/dashboard/roadmap?plan=abc")
+  })
+})
+
+describe("planIdFromRoadmapHref", () => {
+  it("extracts the plan id from a roadmap deep link", () => {
+    expect(planIdFromRoadmapHref("/dashboard/roadmap?plan=11111111-2222-3333-4444-555555555555")).toBe(
+      "11111111-2222-3333-4444-555555555555",
+    )
+  })
+
+  it("returns null for non-roadmap links and empty input", () => {
+    expect(planIdFromRoadmapHref("/dashboard#plan-abc")).toBeNull()
+    expect(planIdFromRoadmapHref("/dashboard/roadmap")).toBeNull()
+    expect(planIdFromRoadmapHref(null)).toBeNull()
+    expect(planIdFromRoadmapHref(undefined)).toBeNull()
+    expect(planIdFromRoadmapHref("")).toBeNull()
   })
 })
 
 describe("submitPlanFeedbackAction", () => {
-  function makeSupabaseMock() {
+  function makeSupabaseMock({ planActive = true }: { planActive?: boolean } = {}) {
     const upsert = vi.fn().mockResolvedValue({ error: null })
-    return {
-      upsert,
-      from: vi.fn(() => ({ upsert })),
-    }
+    const maybeSingle = vi.fn().mockResolvedValue(
+      planActive ? { data: { id: "plan-1" }, error: null } : { data: null, error: null },
+    )
+    const select = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle }) }),
+    })
+    const from = vi.fn((table: string) => {
+      if (table === "platform_plans") return { select }
+      if (table === "plan_feedback") return { upsert }
+      throw new Error(`Unexpected table ${table}`)
+    })
+    return { upsert, from }
   }
 
   beforeEach(() => {
@@ -70,6 +94,15 @@ describe("submitPlanFeedbackAction", () => {
 
     expect((await submitPlanFeedbackAction("plan-1", 0, "meh")).error).toMatch(/rating/i)
     expect((await submitPlanFeedbackAction("plan-1", 6, "wow")).error).toMatch(/rating/i)
+    expect(mock.upsert).not.toHaveBeenCalled()
+  })
+
+  it("rejects feedback for unpublished plans (drafts are invisible to members)", async () => {
+    const mock = makeSupabaseMock({ planActive: false })
+    vi.mocked(createClient).mockReturnValue(mock as never)
+
+    const result = await submitPlanFeedbackAction("plan-draft", 5, "should not save")
+    expect(result.error).toMatch(/feedback/i)
     expect(mock.upsert).not.toHaveBeenCalled()
   })
 

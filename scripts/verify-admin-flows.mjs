@@ -218,6 +218,26 @@ try {
   const notifSeen = await user.getByText(/UreSphere update|new plan|roadmap|Share your feedback/i).first().waitFor({ state: "visible", timeout: 10000 }).then(() => true).catch(() => false)
   check("User received a plan-published notification", notifSeen)
 
+  // Clicking the notification must open the exact plan on the Dashboard
+  // Roadmap page (deep link /dashboard/roadmap?plan=<id>), not the overview.
+  const notifCard = user.locator("a").filter({ hasText: planTitle }).first()
+  const notifClickable = await notifCard.waitFor({ state: "visible", timeout: 10000 }).then(() => true).catch(() => false)
+  check("Notification card links to the plan", notifClickable, planTitle)
+  if (notifClickable) {
+    await notifCard.click()
+    await user.waitForURL(/\/dashboard\/roadmap\?plan=/, { timeout: 15000 })
+    check("Notification opens Dashboard Roadmap deep link", /\/dashboard\/roadmap\?plan=/.test(user.url()), user.url())
+    const planOnRoadmap = await user.getByText(planTitle, { exact: false }).first().waitFor({ state: "visible", timeout: 15000 }).then(() => true).catch(() => false)
+    check("Deep-linked plan visible on Dashboard Roadmap", planOnRoadmap, planTitle)
+
+    // Roadmap feedback flow — stars + comment saved from the dashboard page
+    await user.locator('button[role="radio"][aria-label="5 stars"]').click()
+    await user.locator('input[placeholder*="What would make this great"]').fill("Works from the roadmap page!")
+    await user.getByRole("button", { name: /feedback/i }).click()
+    const roadmapSaved = await user.getByText("Thanks!", { exact: false }).first().waitFor({ state: "visible", timeout: 10000 }).then(() => true).catch(() => false)
+    check("Roadmap feedback submitted (rating + comment)", roadmapSaved)
+  }
+
   // Super admin sees feedback count + average rating
   await admin.goto(`${APP_URL}/admin`, { waitUntil: "domcontentloaded" })
   await admin.getByRole("tab", { name: "Platform plans" }).click()

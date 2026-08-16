@@ -300,6 +300,12 @@ export default async function DashboardPage() {
                 <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{plan.description}</p>
               )}
               <PlanFeedbackForm planId={plan.id} initial={myFeedback} signedIn />
+              <Button asChild variant="ghost" size="sm" className="mt-2 gap-1.5 px-0 text-primary">
+                <Link href="/dashboard/roadmap">
+                  View full roadmap
+                  <ArrowRight className="size-3.5" aria-hidden="true" />
+                </Link>
+              </Button>
             </CardContent>
           </Card>
         </section>
