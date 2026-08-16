@@ -1,0 +1,669 @@
+"use client"
+
+import { useMemo, useState, useTransition } from "react"
+import Link from "next/link"
+import {
+  createSubjectAction,
+  updateSubjectAction,
+  deleteSubjectAction,
+  createUnitAction,
+  deleteUnitAction,
+  uploadResourceAction,
+  updateResourceAction,
+  deleteResourceAction,
+  createCalendarEntryAction,
+  deleteCalendarEntryAction,
+} from "@/lib/actions/admin"
+import type { AcademicSection } from "@/lib/academic"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog"
+import {
+  ArrowLeft,
+  BookOpen,
+  CalendarDays,
+  FileText,
+  GraduationCap,
+  Layers,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react"
+import { toast } from "sonner"
+
+const TYPE_LABELS: Record<string, string> = {
+  notes: "Notes",
+  handwritten: "Handwritten",
+  syllabus: "Syllabus",
+  paper: "Previous paper",
+  other: "Other",
+}
+
+const DEGREES = ["B.Tech", "BBA", "MBA", "BCA", "MCA", "Other"]
+const YEARS = ["First Year", "Second Year", "Third Year", "Fourth Year"]
+
+type Subject = { id: string; name: string; code: string; degree: string; year: string; branch: string }
+type Unit = { id: string; subject_id: string; name: string }
+type Resource = {
+  id: string
+  title: string
+  type: string
+  url: string
+  subject_id: string | null
+  subjectName: string
+}
+type CalendarEntry = { id: string; title: string; event_date: string; description: string }
+
+export function AcademicAdminSectionClient({
+  sphereId,
+  sphereName,
+  section,
+  sectionLabel,
+  subjects,
+  units,
+  resources,
+  calendar,
+}: {
+  sphereId: string
+  sphereName: string
+  section: AcademicSection
+  sectionLabel: string
+  subjects: Subject[]
+  units: Unit[]
+  resources: Resource[]
+  calendar: CalendarEntry[]
+}) {
+  const [isPending, startTransition] = useTransition()
+
+  // Subject dialog state
+  const [subjectOpen, setSubjectOpen] = useState(false)
+  const [editingSubject, setEditingSubject] = useState<Subject | null>(null)
+
+  // Unit dialog state
+  const [unitOpen, setUnitOpen] = useState(false)
+  const [unitSubjectId, setUnitSubjectId] = useState<string>("")
+
+  // Resource state
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [editingResource, setEditingResource] = useState<Resource | null>(null)
+  const [resourceSubjectId, setResourceSubjectId] = useState<string>("")
+
+  // Calendar state
+  const [calendarOpen, setCalendarOpen] = useState(false)
+
+  const defaultSubjectId = subjects[0]?.id ?? ""
+  const effectiveUnitSubject = unitSubjectId || defaultSubjectId
+  const effectiveResourceSubject = resourceSubjectId || defaultSubjectId
+
+  const unitsOfSubject = useMemo(
+    () => (effectiveUnitSubject ? units.filter((u) => u.subject_id === effectiveUnitSubject) : []),
+    [units, effectiveUnitSubject],
+  )
+  const resourcesOfSubject = useMemo(
+    () => (effectiveResourceSubject ? resources.filter((r) => r.subject_id === effectiveResourceSubject) : []),
+    [resources, effectiveResourceSubject],
+  )
+
+  function run(action: () => Promise<{ error: string | null }>, success: string) {
+    startTransition(async () => {
+      const result = await action()
+      if (result.error) toast.error(result.error)
+      else toast.success(success)
+    })
+  }
+
+  return (
+    <div className="mx-auto max-w-5xl px-4 py-8 md:px-8">
+      <Link
+        href="/dashboard/academic/admin"
+        className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition hover:text-primary"
+      >
+        <ArrowLeft className="size-4" aria-hidden="true" />
+        Academic Admin
+      </Link>
+
+      <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-primary">
+            <GraduationCap className="size-3.5" />
+            Academic Admin
+          </p>
+          <h1 className="text-pretty font-serif text-3xl font-semibold text-foreground">{sectionLabel}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {sphereName} — manage the subjects, units, resources and calendar for this section.
+          </p>
+        </div>
+      </div>
+
+      {/* Subjects */}
+      <section className="mb-8">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <BookOpen className="size-4 text-primary" aria-hidden="true" />
+            Subjects
+          </h2>
+          <Button
+            size="sm"
+            className="gap-1.5"
+            onClick={() => {
+              setEditingSubject(null)
+              setSubjectOpen(true)
+            }}
+          >
+            <Plus className="size-3.5" />
+            Add subject
+          </Button>
+        </div>
+        {subjects.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
+            No subjects in this section yet — add the first one.
+          </p>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {subjects.map((s) => (
+              <Card key={s.id} className="border-border/70 bg-card">
+                <CardContent className="flex items-center justify-between gap-3 p-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">{s.name}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {[s.code, s.degree, s.year, s.branch].filter(Boolean).join(" · ") || "—"}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isPending}
+                      onClick={() => {
+                        setEditingSubject(s)
+                        setSubjectOpen(true)
+                      }}
+                      aria-label={`Edit ${s.name}`}
+                    >
+                      <Pencil className="size-3" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-muted-foreground hover:text-destructive"
+                      disabled={isPending}
+                      onClick={() => {
+                        if (confirm(`Delete subject "${s.name}"? Its units and resources will be unlinked.`)) {
+                          run(() => deleteSubjectAction(s.id), "Subject deleted")
+                        }
+                      }}
+                      aria-label={`Delete ${s.name}`}
+                    >
+                      <Trash2 className="size-3" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Units */}
+      <section className="mb-8">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Layers className="size-4 text-primary" aria-hidden="true" />
+            Units
+          </h2>
+          {subjects.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => {
+                setUnitSubjectId(effectiveUnitSubject)
+                setUnitOpen(true)
+              }}
+            >
+              <Plus className="size-3.5" />
+              Add unit
+            </Button>
+          )}
+        </div>
+        {subjects.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
+            Add a subject first.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <div className="max-w-xs">
+              <Select value={effectiveUnitSubject} onValueChange={(v) => setUnitSubjectId(v ?? "")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {subjects.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {unitsOfSubject.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-border py-6 text-center text-sm text-muted-foreground">
+                No units yet.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {unitsOfSubject.map((u) => (
+                  <span
+                    key={u.id}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card px-3 py-1 text-xs text-foreground"
+                  >
+                    {u.name}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm(`Delete unit "${u.name}"?`)) run(() => deleteUnitAction(u.id), "Unit deleted")
+                      }}
+                      disabled={isPending}
+                      className="text-muted-foreground transition hover:text-destructive"
+                      aria-label={`Delete unit ${u.name}`}
+                    >
+                      <Trash2 className="size-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* Resources */}
+      <section className="mb-8">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <FileText className="size-4 text-primary" aria-hidden="true" />
+            Resources
+          </h2>
+          {subjects.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => {
+                setEditingResource(null)
+                setUploadOpen(true)
+              }}
+            >
+              <Plus className="size-3.5" />
+              Upload resource
+            </Button>
+          )}
+        </div>
+        {subjects.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
+            Add a subject first.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <div className="max-w-xs">
+              <Select value={effectiveResourceSubject} onValueChange={(v) => setResourceSubjectId(v ?? "")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {subjects.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {resourcesOfSubject.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-border py-6 text-center text-sm text-muted-foreground">
+                No resources for this subject yet.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {resourcesOfSubject.map((r) => (
+                  <Card key={r.id} className="border-border/70 bg-card">
+                    <CardContent className="flex items-center justify-between gap-3 p-3">
+                      <a
+                        href={r.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex min-w-0 items-center gap-3"
+                      >
+                        <FileText className="size-4 shrink-0 text-primary" />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-foreground hover:underline">{r.title}</p>
+                          <p className="text-xs text-muted-foreground">{TYPE_LABELS[r.type] ?? r.type}</p>
+                        </div>
+                      </a>
+                      <div className="flex shrink-0 gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isPending}
+                          onClick={() => {
+                            setEditingResource(r)
+                            setUploadOpen(true)
+                          }}
+                          aria-label={`Edit ${r.title}`}
+                        >
+                          <Pencil className="size-3" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-muted-foreground hover:text-destructive"
+                          disabled={isPending}
+                          onClick={() => {
+                            if (confirm(`Delete resource "${r.title}"?`)) run(() => deleteResourceAction(r.id), "Resource deleted")
+                          }}
+                          aria-label={`Delete ${r.title}`}
+                        >
+                          <Trash2 className="size-3" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* Calendar */}
+      <section className="mb-8">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <CalendarDays className="size-4 text-primary" aria-hidden="true" />
+            Academic calendar
+          </h2>
+          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setCalendarOpen(true)}>
+            <Plus className="size-3.5" />
+            Add entry
+          </Button>
+        </div>
+        {calendar.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
+            Nothing on the calendar yet.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {calendar.map((entry) => (
+              <div key={entry.id} className="flex items-start gap-3 rounded-lg border border-border/70 bg-card px-4 py-3">
+                <CalendarDays className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-foreground">{entry.title}</p>
+                  {entry.description && <p className="text-xs text-muted-foreground">{entry.description}</p>}
+                </div>
+                <Badge variant="outline" className="shrink-0 border-border/60 font-normal text-muted-foreground">
+                  {new Date(`${entry.event_date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                </Badge>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="shrink-0 text-muted-foreground hover:text-destructive"
+                  disabled={isPending}
+                  onClick={() => {
+                    if (confirm(`Delete calendar entry "${entry.title}"?`)) run(() => deleteCalendarEntryAction(entry.id), "Entry deleted")
+                  }}
+                  aria-label={`Delete ${entry.title}`}
+                >
+                  <Trash2 className="size-3" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Subject add / edit */}
+      <Dialog open={subjectOpen} onOpenChange={setSubjectOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingSubject ? "Edit subject" : "Add a subject"}</DialogTitle>
+            <DialogDescription>
+              {editingSubject ? "Update this subject." : `New subject in ${sectionLabel}.`}
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            action={(formData) =>
+              run(async () => {
+                formData.set("sphereId", sphereId)
+                const r = editingSubject
+                  ? await updateSubjectAction(formData)
+                  : await createSubjectAction(formData)
+                if (!r.error) setSubjectOpen(false)
+                return r
+              }, editingSubject ? "Subject updated" : "Subject added")
+            }
+            className="flex flex-col gap-4"
+          >
+            {editingSubject && <input type="hidden" name="id" value={editingSubject.id} />}
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="acName">Subject name</Label>
+              <Input id="acName" name="name" required defaultValue={editingSubject?.name ?? ""} placeholder="Data Structures" />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="acCode">Code (optional)</Label>
+              <Input id="acCode" name="code" defaultValue={editingSubject?.code ?? ""} placeholder="CS-203" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-2">
+                <Label>Degree</Label>
+                <Select name="degree" defaultValue={editingSubject?.degree ?? section.degree}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Any" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DEGREES.map((d) => (
+                      <SelectItem key={d} value={d}>
+                        {d}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label>Year</Label>
+                <Select name="year" defaultValue={editingSubject?.year ?? section.year}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Any" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {YEARS.map((y) => (
+                      <SelectItem key={y} value={y}>
+                        {y}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="acBranch">Branch (optional)</Label>
+              <Input id="acBranch" name="branch" defaultValue={editingSubject?.branch ?? section.branch} placeholder="CSE" />
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="ghost">
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button type="submit" disabled={isPending}>
+                {editingSubject ? "Save changes" : "Add subject"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unit add */}
+      <Dialog open={unitOpen} onOpenChange={setUnitOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add a unit</DialogTitle>
+            <DialogDescription>Units break a subject into parts (e.g. Unit 1, Unit 2).</DialogDescription>
+          </DialogHeader>
+          <form
+            action={(formData) =>
+              run(async () => {
+                formData.set("subjectId", effectiveUnitSubject)
+                const r = await createUnitAction(formData)
+                if (!r.error) setUnitOpen(false)
+                return r
+              }, "Unit added")
+            }
+            className="flex flex-col gap-4"
+          >
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="acUnitName">Unit name</Label>
+              <Input id="acUnitName" name="name" required placeholder="Unit 1 — Arrays" />
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="ghost">
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button type="submit" disabled={isPending}>
+                Add unit
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Resource upload / edit */}
+      <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingResource ? "Edit resource" : "Upload a resource"}</DialogTitle>
+            <DialogDescription>
+              {editingResource ? "Update this resource." : "Add notes, syllabi, and previous papers for students."}
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            action={(formData) =>
+              run(async () => {
+                formData.set("sphereId", sphereId)
+                formData.set("subjectId", editingResource?.subject_id ?? effectiveResourceSubject)
+                const r = editingResource
+                  ? await updateResourceAction(formData)
+                  : await uploadResourceAction(formData)
+                if (!r.error) setUploadOpen(false)
+                return r
+              }, editingResource ? "Resource updated" : "Resource uploaded")
+            }
+            className="flex flex-col gap-4"
+          >
+            {editingResource && <input type="hidden" name="id" value={editingResource.id} />}
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="acResTitle">Title</Label>
+              <Input id="acResTitle" name="title" required defaultValue={editingResource?.title ?? ""} placeholder="Data Structures — Unit 3 notes" />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>Type</Label>
+              <Select name="type" defaultValue={editingResource?.type ?? "notes"}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(TYPE_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="acResUrl">File or document URL</Label>
+              <Input id="acResUrl" name="url" type="url" required defaultValue={editingResource?.url ?? ""} placeholder="https://..." />
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="ghost">
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button type="submit" disabled={isPending}>
+                {editingResource ? "Save changes" : "Upload"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Calendar entry */}
+      <Dialog open={calendarOpen} onOpenChange={setCalendarOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add a calendar entry</DialogTitle>
+          </DialogHeader>
+          <form
+            action={(formData) =>
+              run(async () => {
+                formData.set("sphereId", sphereId)
+                const r = await createCalendarEntryAction(formData)
+                if (!r.error) setCalendarOpen(false)
+                return r
+              }, "Calendar updated")
+            }
+            className="flex flex-col gap-4"
+          >
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="acCalTitle">Title</Label>
+              <Input id="acCalTitle" name="title" required placeholder="Mid-semester exams" />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="acCalDate">Date</Label>
+              <Input id="acCalDate" name="date" type="date" required />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="acCalDesc">Description (optional)</Label>
+              <Textarea id="acCalDesc" name="description" rows={2} />
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="ghost">
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button type="submit" disabled={isPending}>
+                Add entry
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <p className="text-xs text-muted-foreground/70">
+        Section: {sectionLabel} · {sphereName}
+      </p>
+    </div>
+  )
+}

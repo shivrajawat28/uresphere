@@ -874,10 +874,43 @@ export async function assignRoleAction(formData: FormData): Promise<ActionResult
   const fallback = ROLE_PERMISSION_PRESETS[role as AssignableRole]
   const effectivePermissions = permissions.length > 0 ? permissions : fallback
 
+  // academic_manager may be assigned one or more academic sections. The UI
+  // sends `sections` as a JSON array of {degree, year, branch}; a blank field
+  // inside a section is a wildcard. Other roles keep the scalar fields.
+  let sections: { degree: string; year: string; branch: string }[] | null = null
+  if (role === "academic_manager") {
+    const raw = String(formData.get("sections") ?? "").trim()
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) {
+          sections = parsed
+            .map((s) => ({
+              degree: String((s as { degree?: unknown })?.degree ?? "").trim(),
+              year: String((s as { year?: unknown })?.year ?? "").trim(),
+              branch: String((s as { branch?: unknown })?.branch ?? "").trim(),
+            }))
+            .filter((s) => s.degree || s.year || s.branch)
+        }
+      } catch {
+        sections = null
+      }
+    }
+  }
+
   const scope: Record<string, unknown> = { permissions: effectivePermissions }
-  if (degree) scope.degree = degree
-  if (year) scope.year = year
-  if (branch) scope.branch = branch
+  if (role === "academic_manager" && sections && sections.length > 0) {
+    scope.sections = sections
+    // Keep the legacy scalar fields = first section so older SQL checks
+    // (has_permission scalar path) keep working for that section.
+    scope.degree = sections[0].degree
+    scope.year = sections[0].year
+    scope.branch = sections[0].branch
+  } else {
+    if (degree) scope.degree = degree
+    if (year) scope.year = year
+    if (branch) scope.branch = branch
+  }
 
   const { error } = await supabase.from("role_assignments").upsert(
     {

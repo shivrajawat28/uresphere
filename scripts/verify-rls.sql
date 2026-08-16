@@ -596,4 +596,95 @@ select (select public.has_permission('events.create')) = false as scoped_manager
 select (select public.is_sphere_admin((select id from public.spheres where slug = 'its'))) = false as scoped_manager_not_sphere_admin;
 reset role;
 
+-- ── 13b. Academic section managers (migration 0010) ──────────────────────
+select '13b. academic section managers' as test;
+
+-- Ira (plain user, DTU member) is assigned academic_manager with a `sections`
+-- array — the new multi-section scope. She manages First Year of any
+-- degree/branch in DTU, and nothing else.
+set role postgres;
+insert into public.role_assignments (user_id, sphere_id, role, scope)
+select '99999999-9999-9999-9999-999999999999', id, 'academic_manager',
+       '{"permissions":["academic.create","academic.update","academic.delete"],"sections":[{"degree":"","year":"First Year","branch":""}]}'::jsonb
+from public.spheres where slug = 'delhi-technological';
+set role authenticated;
+set app.uid = '99999999-9999-9999-9999-999999999999';  -- Ira
+
+-- can_manage_academic: in-scope (any degree/branch of First Year) → true.
+select (select public.can_manage_academic((select id from public.spheres where slug = 'delhi-technological'), '', 'First Year', '')) = true as in_scope_section_granted,
+       (select public.can_manage_academic((select id from public.spheres where slug = 'delhi-technological'), 'B.Tech', 'First Year', 'CSE')) = true as wildcard_year_covers_degree_branch;
+-- Out-of-scope section (Second Year) → false.
+select (select public.can_manage_academic((select id from public.spheres where slug = 'delhi-technological'), '', 'Second Year', '')) = false as other_section_denied;
+-- Same section in ANOTHER Sphere → false (sphere + section both enforced).
+select (select public.can_manage_academic((select id from public.spheres where slug = 'its'), '', 'First Year', '')) = false as cross_sphere_denied;
+
+-- RLS: Ira can insert a First Year subject in DTU (any degree/branch).
+insert into public.subjects (sphere_id, name, code, degree, year, branch, created_by)
+select id, 'Intro to Computing', 'CS-101', 'B.Tech', 'First Year', 'CSE', '99999999-9999-9999-9999-999999999999'
+from public.spheres where slug = 'delhi-technological';
+select (select count(*) from public.subjects where name = 'Intro to Computing') = 1 as manager_inserts_in_assigned_section;
+
+-- RLS: the SAME manager cannot insert into an unassigned section (WITH CHECK
+-- raises, even with a forged year).
+do $$
+begin
+  begin
+    insert into public.subjects (sphere_id, name, code, degree, year, branch, created_by)
+    select id, 'Sneaky Second Year', 'X', 'B.Tech', 'Second Year', 'CSE', '99999999-9999-9999-9999-999999999999'
+    from public.spheres where slug = 'delhi-technological';
+    raise exception 'FAIL: manager inserted outside assigned section';
+  exception when insufficient_privilege then
+    raise notice 'OK: out-of-section insert blocked';
+  end;
+end $$;
+select (select count(*) from public.subjects where name = 'Sneaky Second Year') = 0 as out_of_section_insert_blocked;
+
+-- RLS: manager cannot touch another Sphere's academic content even with a
+-- forged sphere_id (WITH CHECK raises).
+do $$
+begin
+  begin
+    insert into public.subjects (sphere_id, name, code, degree, year, branch, created_by)
+    select id, 'Hack ITS', 'X', 'B.Tech', 'First Year', 'CSE', '99999999-9999-9999-9999-999999999999'
+    from public.spheres where slug = 'its';
+    raise exception 'FAIL: manager wrote into another Sphere';
+  exception when insufficient_privilege then
+    raise notice 'OK: cross-sphere insert blocked';
+  end;
+end $$;
+select (select count(*) from public.subjects where name = 'Hack ITS') = 0 as cross_sphere_insert_blocked;
+
+-- role_assignments_select_own: Ira can read her OWN assignment (needed by the
+-- dashboard workspace) but never anyone else's.
+select (select count(*) from public.role_assignments where user_id = '99999999-9999-9999-9999-999999999999') = 1 as manager_reads_own_assignment,
+       (select count(*) from public.role_assignments where user_id <> '99999999-9999-9999-9999-999999999999') = 0 as manager_cannot_read_others_assignments;
+
+-- A plain member (no assignment) cannot write academic content at all.
+set app.uid = '66666666-6666-6666-6666-666666666666';  -- Fay: ITS member, no role
+select (select public.can_manage_academic((select id from public.spheres where slug = 'its'), '', 'First Year', '')) = false as plain_member_denied;
+do $$
+begin
+  begin
+    insert into public.subjects (sphere_id, name, code, degree, year, branch, created_by)
+    select id, 'Fay subject', 'F', '', 'First Year', '', '66666666-6666-6666-6666-666666666666'
+    from public.spheres where slug = 'its';
+    raise exception 'FAIL: plain member inserted a subject';
+  exception when insufficient_privilege then
+    raise notice 'OK: plain member insert blocked';
+  end;
+end $$;
+select (select count(*) from public.subjects where name = 'Fay subject') = 0 as plain_member_insert_blocked;
+
+-- Legacy scalar scope still works through can_manage_academic (Bob's 0004-era
+-- assignment: B.Tech First Year CSE in ITS). Bob was suspended by the earlier
+-- section-7 suspend test, so re-activate him first — can_manage_academic
+-- correctly refuses suspended users.
+set role postgres;
+update public.profiles set account_status = 'active' where id = '22222222-2222-2222-2222-222222222222';
+set role authenticated;
+set app.uid = '22222222-2222-2222-2222-222222222222';  -- Bob
+select (select public.can_manage_academic((select id from public.spheres where slug = 'its'), 'B.Tech', 'First Year', 'CSE')) = true as legacy_scalar_scope_still_granted,
+       (select public.can_manage_academic((select id from public.spheres where slug = 'its'), '', 'Second Year', '')) = false as legacy_scalar_out_of_scope_denied;
+reset role;
+
 select 'ALL SQL VERIFICATION COMPLETE' as done;

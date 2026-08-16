@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
-import { ArrowLeft, Search, Pencil, Trash2, X } from "lucide-react"
+import { ArrowLeft, Search, Pencil, Trash2, X, Plus } from "lucide-react"
 
 type Member = {
   userId: string
@@ -66,6 +66,7 @@ export function RolesClient({
   const [degree, setDegree] = useState("")
   const [year, setYear] = useState("")
   const [branch, setBranch] = useState("")
+  const [sections, setSections] = useState<{ degree: string; year: string; branch: string }[]>([{ degree: "", year: "", branch: "" }])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showPicker, setShowPicker] = useState(false)
 
@@ -108,6 +109,17 @@ export function RolesClient({
     setDegree(typeof scope.degree === "string" ? scope.degree : "")
     setYear(typeof scope.year === "string" ? scope.year : "")
     setBranch(typeof scope.branch === "string" ? scope.branch : "")
+    if (r === "academic_manager") {
+      const rawSections = Array.isArray(scope.sections) && (scope.sections as unknown[]).length > 0 ? (scope.sections as unknown[]) : null
+      const loaded = rawSections
+        ? rawSections.map((s) => ({
+            degree: String((s as { degree?: unknown })?.degree ?? ""),
+            year: String((s as { year?: unknown })?.year ?? ""),
+            branch: String((s as { branch?: unknown })?.branch ?? ""),
+          }))
+        : [{ degree: String(scope.degree ?? ""), year: String(scope.year ?? ""), branch: String(scope.branch ?? "") }]
+      setSections(loaded.filter((s) => s.degree || s.year || s.branch).length > 0 ? loaded : [{ degree: "", year: "", branch: "" }])
+    }
     setShowPicker(false)
   }
 
@@ -119,7 +131,20 @@ export function RolesClient({
     setDegree("")
     setYear("")
     setBranch("")
+    setSections([{ degree: "", year: "", branch: "" }])
     setShowPicker(false)
+  }
+
+  function setSection(index: number, field: "degree" | "year" | "branch", value: string) {
+    setSections((prev) => prev.map((s, i) => (i === index ? { ...s, [field]: value } : s)))
+  }
+
+  function addSection() {
+    setSections((prev) => [...prev, { degree: "", year: "", branch: "" }])
+  }
+
+  function removeSection(index: number) {
+    setSections((prev) => (prev.length === 1 ? prev : prev.filter((_, i) => i !== index)))
   }
 
   function togglePermission(p: string) {
@@ -138,9 +163,18 @@ export function RolesClient({
       formData.set("sphereId", sphereId)
       formData.set("role", role)
       formData.set("permissions", permissions.join(","))
-      formData.set("degree", degree)
-      formData.set("year", year)
-      formData.set("branch", branch)
+      if (role === "academic_manager") {
+        const nonEmpty = sections.filter((s) => s.degree || s.year || s.branch)
+        if (nonEmpty.length === 0) {
+          toast.error("Add at least one assigned section for an academic manager.")
+          return
+        }
+        formData.set("sections", JSON.stringify(nonEmpty))
+      } else {
+        formData.set("degree", degree)
+        formData.set("year", year)
+        formData.set("branch", branch)
+      }
 
       const result = await assignRoleAction(formData)
       if (result.error) {
@@ -267,7 +301,54 @@ export function RolesClient({
             </p>
           </div>
 
-          {scopeFields.length > 0 && (
+          {role === "academic_manager" && (
+            <div className="space-y-2">
+              <Label>Assigned sections</Label>
+              <p className="text-xs text-muted-foreground">
+                Each section is a degree / year / branch combination. Leave a field blank to cover all of it — e.g.
+                just “First Year” manages every First Year subject, whatever the degree or branch.
+              </p>
+              <div className="space-y-2">
+                {sections.map((s, i) => (
+                  <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] items-center gap-2">
+                    <Input
+                      value={s.degree}
+                      onChange={(e) => setSection(i, "degree", e.target.value)}
+                      placeholder="Degree (any)"
+                      aria-label={`Section ${i + 1} degree`}
+                    />
+                    <Input
+                      value={s.year}
+                      onChange={(e) => setSection(i, "year", e.target.value)}
+                      placeholder="Year (any)"
+                      aria-label={`Section ${i + 1} year`}
+                    />
+                    <Input
+                      value={s.branch}
+                      onChange={(e) => setSection(i, "branch", e.target.value)}
+                      placeholder="Branch (any)"
+                      aria-label={`Section ${i + 1} branch`}
+                    />
+                    <Button
+                      type="button"
+                      size="icon-xs"
+                      variant="ghost"
+                      onClick={() => removeSection(i)}
+                      disabled={sections.length === 1}
+                      aria-label="Remove section"
+                    >
+                      <X className="size-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <Button type="button" size="sm" variant="outline" className="gap-1" onClick={addSection}>
+                <Plus className="size-3.5" aria-hidden="true" />
+                Add section
+              </Button>
+            </div>
+          )}
+          {role !== "academic_manager" && scopeFields.length > 0 && (
             <div className="grid grid-cols-3 gap-2">
               {scopeFields.includes("degree") && (
                 <div className="space-y-1.5">
@@ -358,7 +439,14 @@ export function RolesClient({
               const member = users.find((u) => u.userId === a.user_id)
               const scope = a.scope ?? {}
               const perms = Array.isArray(scope.permissions) ? (scope.permissions as string[]) : []
-              const scopeText = [scope.degree, scope.year, scope.branch].filter(Boolean).join(" · ")
+              const sectionList = Array.isArray(scope.sections) && (scope.sections as unknown[]).length > 0
+                ? (scope.sections as { degree?: unknown; year?: unknown; branch?: unknown }[]).map(
+                    (s) => [s.degree, s.year, s.branch].filter(Boolean).join(" · ") || "All content",
+                  )
+                : null
+              const scopeText = sectionList
+                ? sectionList.join(" + ")
+                : [scope.degree, scope.year, scope.branch].filter(Boolean).join(" · ")
               return (
                 <Card key={a.id} className="border-border/70 bg-card">
                   <CardContent className="flex flex-wrap items-center gap-3 p-3">

@@ -128,23 +128,43 @@ export function collegeMatchScore(college: CollegeLike, aliases: string[], query
   return best
 }
 
-export type ScopeFilter = { degree?: string; year?: string; branch?: string }
+export type ScopeFilter = {
+  degree?: string
+  year?: string
+  branch?: string
+  /** academic_manager: one entry per assigned academic section. */
+  sections?: ScopeFilter[]
+}
 
 /**
  * Whether an assignment scope (a mask) covers a target academic scope.
  * A manager with `{ degree: "btech", year: "1", branch: "cse" }` manages ONLY
  * B.Tech 1st-year CSE content: every field the mask defines must match the
  * target (case-insensitive); fields the mask leaves blank are unrestricted.
- * Used by the admin actions so a scoped academic manager can never modify
- * content outside their assigned degree/year/branch.
+ * academic_manager scopes may also carry a `sections` array (one entry per
+ * assigned section, e.g. First Year + Second Year) — the target is covered
+ * when ANY section covers it, with the legacy scalar fields kept as the
+ * first section for backward compatibility. Used by the admin actions so a
+ * scoped academic manager can never modify content outside their assigned
+ * degree/year/branch.
  */
 export function scopeCovers(assignmentScope: ScopeFilter | null | undefined, target: ScopeFilter): boolean {
   if (!assignmentScope) return false
-  const norm = (v: string | undefined) => (v ?? "").trim().toLowerCase()
-  if (assignmentScope.degree && norm(assignmentScope.degree) !== norm(target.degree)) return false
-  if (assignmentScope.year && norm(assignmentScope.year) !== norm(target.year)) return false
-  if (assignmentScope.branch && norm(assignmentScope.branch) !== norm(target.branch)) return false
-  return true
+  const coversScalar = (mask: ScopeFilter | null | undefined, t: ScopeFilter): boolean => {
+    if (!mask) return false
+    const norm = (v: string | undefined) => (v ?? "").trim().toLowerCase()
+    if (mask.degree && norm(mask.degree) !== norm(t.degree)) return false
+    if (mask.year && norm(mask.year) !== norm(t.year)) return false
+    if (mask.branch && norm(mask.branch) !== norm(t.branch)) return false
+    return true
+  }
+  const sections = Array.isArray((assignmentScope as { sections?: unknown }).sections)
+    ? ((assignmentScope as { sections: unknown[] }).sections as ScopeFilter[])
+    : null
+  if (sections && sections.length > 0) {
+    return sections.some((s) => coversScalar(s, target))
+  }
+  return coversScalar(assignmentScope, target)
 }
 
 export type CollegeDirectoryEntry = {

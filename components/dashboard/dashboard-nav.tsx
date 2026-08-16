@@ -28,11 +28,20 @@ import {
   Settings,
   MoreHorizontal,
   Milestone,
+  GraduationCap,
 } from "lucide-react"
 
 type NavLink = { href: string; label: string; icon: typeof LayoutGrid; badge?: number }
 
-export function DashboardNav({ member, initialUnread = 0 }: { member: CurrentMember; initialUnread?: number }) {
+export function DashboardNav({
+  member,
+  initialUnread = 0,
+  isAcademicManager = false,
+}: {
+  member: CurrentMember
+  initialUnread?: number
+  isAcademicManager?: boolean
+}) {
   const pathname = usePathname()
   const [unread, setUnread] = useState(initialUnread)
   const [moreOpen, setMoreOpen] = useState(false)
@@ -61,6 +70,9 @@ export function DashboardNav({ member, initialUnread = 0 }: { member: CurrentMem
         label: "Campus",
         links: [
           { href: "/dashboard/academic", label: "Academic", icon: BookOpen },
+          ...(isAcademicManager
+            ? [{ href: "/dashboard/academic/admin", label: "Academic Admin", icon: GraduationCap }]
+            : []),
           { href: "/dashboard/events", label: "Events", icon: CalendarDays },
           { href: "/dashboard/clubs", label: "Clubs", icon: Sparkles },
         ],
@@ -83,7 +95,7 @@ export function DashboardNav({ member, initialUnread = 0 }: { member: CurrentMem
         ],
       },
     ],
-    [unread],
+    [unread, isAcademicManager],
   )
 
   // Mobile bottom bar — the four most-used destinations.
@@ -106,12 +118,15 @@ export function DashboardNav({ member, initialUnread = 0 }: { member: CurrentMem
       { href: "/dashboard/events", label: "Events", icon: CalendarDays },
       { href: "/dashboard/clubs", label: "Clubs", icon: Sparkles },
       { href: "/dashboard/global-listings", label: "Global Listings", icon: Globe },
+      ...(isAcademicManager
+        ? [{ href: "/dashboard/academic/admin", label: "Academic Admin", icon: GraduationCap }]
+        : []),
       { href: "/dashboard/premium", label: "Premium", icon: Gem },
       { href: "/dashboard/roadmap", label: "Roadmap", icon: Milestone },
       { href: "/dashboard/settings", label: "Profile & settings", icon: Settings },
       { href: "/dashboard/about", label: "About", icon: Orbit },
     ],
-    [],
+    [isAcademicManager],
   )
 
   // Keep the unread badge live without polling (RLS delivers only own rows).
