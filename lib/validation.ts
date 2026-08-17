@@ -198,6 +198,19 @@ export function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
 
+/**
+ * Normalizes an Indian phone number to E.164 (+91XXXXXXXXXX) or null.
+ * Accepts 10 digits (starting 6–9), with optional 91/0/091 prefixes.
+ * Shared by the signup page (client) and the server actions (server).
+ */
+export function normalizeIndianPhone(raw: string): string | null {
+  const digits = raw.replace(/\D/g, "")
+  if (digits.length === 10 && /^[6-9]/.test(digits)) return `+91${digits}`
+  if (digits.length === 12 && digits.startsWith("91") && /^[6-9]/.test(digits.slice(2))) return `+${digits}`
+  if (digits.length === 13 && digits.startsWith("091") && /^[6-9]/.test(digits.slice(3))) return `+91${digits.slice(3)}`
+  return null
+}
+
 export type SignupInput = {
   realName: string
   phone: string

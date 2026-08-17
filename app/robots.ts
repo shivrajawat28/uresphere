@@ -1,14 +1,15 @@
 import type { MetadataRoute } from "next"
+import { getSiteUrl } from "@/lib/site-url"
 
 export default function robots(): MetadataRoute.Robots {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
+  const baseUrl = getSiteUrl()
 
   return {
     rules: [
       {
-        // The landing page and public marketing pages are indexable.
+        // Public marketing pages are indexable.
         userAgent: "*",
-        allow: ["/", "/about", "/request-college", "/auth/login", "/auth/sign-up", "/auth/forgot-password"],
+        allow: ["/", "/about", "/request-college"],
       },
       {
         // Everything behind authentication is private and must not be indexed.
@@ -17,9 +18,7 @@ export default function robots(): MetadataRoute.Robots {
           "/dashboard/",
           "/admin/",
           "/onboarding/",
-          "/auth/callback",
-          "/auth/reset-password",
-          "/auth/suspended",
+          "/auth/",
           "/api/",
         ],
       },

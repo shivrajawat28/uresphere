@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import { useState, useTransition } from "react"
-import { MoreVertical, Flag, Trash2, CheckCircle2, ImageOff } from "lucide-react"
+import { MoreVertical, Flag, Trash2, CheckCircle2, ImageOff, ShoppingCart, Loader2 } from "lucide-react"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -15,7 +15,12 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
-import { deleteListingAction, reportListingAction, updateListingStatusAction } from "@/lib/actions/marketplace"
+import {
+  addToCartAction,
+  deleteListingAction,
+  reportListingAction,
+  updateListingStatusAction,
+} from "@/lib/actions/marketplace"
 import { BuyNowDialog } from "@/components/marketplace/buy-now-dialog"
 import type { Listing } from "@/app/dashboard/marketplace/page"
 
@@ -37,6 +42,8 @@ export function ListingCard({ listing, currentUserId }: { listing: Listing; curr
   const [reason, setReason] = useState("")
   const [isPending, startTransition] = useTransition()
   const coverImage = listing.image_urls[0]
+  const publicStatus = listing.status === "active" || listing.status === "sold"
+  const effectivePrice = listing.admin_price_cents ?? listing.price_cents
 
   function handleMarkSold() {
     startTransition(async () => {
@@ -66,6 +73,14 @@ export function ListingCard({ listing, currentUserId }: { listing: Listing; curr
     })
   }
 
+  function handleAddToCart() {
+    startTransition(async () => {
+      const result = await addToCartAction(listing.id, 1)
+      if (result.error) toast.error(result.error)
+      else toast.success("Added to your cart")
+    })
+  }
+
   return (
     <Card className="overflow-hidden border-border bg-card">
       <div className="relative aspect-[4/3] w-full bg-muted">
@@ -79,6 +94,20 @@ export function ListingCard({ listing, currentUserId }: { listing: Listing; curr
         {listing.status === "sold" && (
           <div className="absolute inset-0 flex items-center justify-center bg-background/70">
             <Badge className="bg-primary text-primary-foreground">Sold</Badge>
+          </div>
+        )}
+        {listing.status === "pending" && (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/60">
+            <Badge variant="outline" className="border-amber-500/50 bg-background/90 text-amber-600">
+              Pending review
+            </Badge>
+          </div>
+        )}
+        {listing.status === "removed" && (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/60">
+            <Badge variant="outline" className="border-destructive/40 bg-background/90 text-destructive">
+              {listing.rejection_reason ? "Rejected" : "Removed"}
+            </Badge>
           </div>
         )}
         <div className="absolute right-2 top-2">
@@ -112,11 +141,14 @@ export function ListingCard({ listing, currentUserId }: { listing: Listing; curr
       <CardContent className="flex flex-col gap-1.5 p-4">
         <div className="flex items-start justify-between gap-2">
           <h3 className="line-clamp-1 font-medium text-foreground">{listing.title}</h3>
-          <span className="shrink-0 font-serif text-lg font-semibold text-primary">
-            {formatPrice(listing.price_cents)}
-          </span>
+          <span className="shrink-0 font-serif text-lg font-semibold text-primary">{formatPrice(effectivePrice)}</span>
         </div>
         <p className="line-clamp-2 text-sm text-muted-foreground">{listing.description}</p>
+        {isOwner && listing.status === "removed" && listing.rejection_reason && (
+          <p className="rounded-md border border-destructive/20 bg-destructive/5 px-2 py-1 text-[11px] text-destructive">
+            Rejected: {listing.rejection_reason}
+          </p>
+        )}
       </CardContent>
       <CardFooter className="flex items-center justify-between gap-3 border-t border-border p-4 pt-3">
         <div className="flex items-center gap-2">
@@ -125,18 +157,24 @@ export function ListingCard({ listing, currentUserId }: { listing: Listing; curr
           </Badge>
           <span className="text-xs text-muted-foreground">{CONDITION_LABELS[listing.condition]}</span>
         </div>
-        {!isOwner && listing.status === "active" && (
-          <Button size="sm" onClick={() => setBuyOpen(true)}>
-            Buy now
-          </Button>
+        {publicStatus && !isOwner && listing.status === "active" && (
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={handleAddToCart} disabled={isPending} className="gap-1.5">
+              {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <ShoppingCart className="size-3.5" />}
+              Add to cart
+            </Button>
+            <Button size="sm" onClick={() => setBuyOpen(true)}>
+              Buy now
+            </Button>
+          </div>
         )}
       </CardFooter>
 
-      {!isOwner && listing.status === "active" && (
+      {publicStatus && !isOwner && listing.status === "active" && (
         <BuyNowDialog
           listingId={listing.id}
           title={listing.title}
-          priceCents={listing.price_cents}
+          priceCents={effectivePrice}
           open={buyOpen}
           onOpenChange={setBuyOpen}
         />

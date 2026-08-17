@@ -13,7 +13,7 @@ export default async function SettingsPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("real_name, phone, college_input")
+    .select("real_name, phone, college_input, college_year")
     .eq("id", member.userId)
     .maybeSingle()
 
@@ -72,6 +72,16 @@ export default async function SettingsPage() {
               <span className="text-muted-foreground">College</span>
               <span className="ml-auto font-medium">{profile?.college_input ?? "—"}</span>
             </div>
+            {profile?.college_year && (
+              <>
+                <Separator className="bg-border/60" />
+                <div className="flex items-center gap-3 text-sm">
+                  <GraduationCap className="size-4 text-muted-foreground" />
+                  <span className="text-muted-foreground">Current year</span>
+                  <span className="ml-auto font-medium capitalize">{profile.college_year}</span>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 

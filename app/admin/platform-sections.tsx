@@ -15,7 +15,7 @@ import {
   setCollegeStatusAction,
   updatePromotionPaymentConfigAction,
 } from "@/lib/actions/platform"
-import { Orbit, Loader2, Upload, X, QrCode } from "lucide-react"
+import { Orbit, Loader2, Plus, Upload, X, QrCode } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -30,6 +30,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
+import { FileUpload } from "@/components/ui/file-upload"
+import { upsertShopProductAction, deleteShopProductAction } from "@/lib/actions/platform"
 
 export type PlatformData = {
   colleges: {
@@ -815,6 +817,217 @@ export function OrdersSection({ orders }: { orders: OrderRow[] }) {
             </CardContent>
           </Card>
         ))
+      )}
+    </div>
+  )
+}
+
+export type ShopProductRow = {
+  id: string
+  name: string
+  description: string
+  category: string
+  price_cents: number
+  image_urls: string[]
+  availability: string
+  active: boolean
+  delivery_info: string | null
+  payment_info: string | null
+}
+
+const SHOP_CATEGORY_LABELS: Record<string, string> = {
+  food: "Food",
+  stationery: "Stationery",
+  essentials: "Essentials",
+  other: "Other",
+}
+
+const SHOP_AVAILABILITY = ["in_stock", "low_stock", "out_of_stock"] as const
+
+export function ShopProductsSection({ sphereId, products }: { sphereId: string; products: ShopProductRow[] }) {
+  const [isPending, startTransition] = useTransition()
+  const [editing, setEditing] = useState<ShopProductRow | null>(null)
+  const [creating, setCreating] = useState(false)
+  const [images, setImages] = useState<string[]>([])
+
+  function run(action: () => Promise<{ error: string | null }>, success: string) {
+    startTransition(async () => {
+      const result = await action()
+      if (result.error) toast.error(result.error)
+      else toast.success(success)
+    })
+  }
+
+  function openCreate() {
+    setEditing(null)
+    setImages([])
+    setCreating(true)
+  }
+
+  function openEdit(p: ShopProductRow) {
+    setEditing(p)
+    setImages(p.image_urls ?? [])
+    setCreating(true)
+  }
+
+  function submit(formData: FormData) {
+    formData.set("sphereId", sphereId)
+    formData.set("imageUrls", JSON.stringify(images))
+    if (editing) formData.set("id", editing.id)
+    run(async () => {
+      const r = await upsertShopProductAction(formData)
+      if (!r.error) setCreating(false)
+      return r
+    }, editing ? "Product updated" : "Product created")
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          Products shown in the UreSphere Shop tab — admin-created, same checkout flow as member listings.
+        </p>
+        <Button size="sm" variant="outline" className="gap-1.5" onClick={openCreate}>
+          <Plus className="size-3.5" aria-hidden="true" />
+          Add product
+        </Button>
+      </div>
+
+      {products.length === 0 ? (
+        <Empty text="No shop products in this Sphere yet." />
+      ) : (
+        <div className="space-y-2">
+          {products.map((p) => (
+            <Card key={p.id} className="border-border/70 bg-card">
+              <CardContent className="flex flex-wrap items-center gap-3 p-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-foreground">{p.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {SHOP_CATEGORY_LABELS[p.category] ?? p.category} ·{" "}
+                    {(p.price_cents / 100).toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 })}
+                    {" · "}
+                    {p.availability.replace("_", " ")}
+                  </p>
+                </div>
+                <Badge variant={p.active ? "default" : "outline"} className="border-border/60 text-[10px] font-normal">
+                  {p.active ? "Live" : "Hidden"}
+                </Badge>
+                <Button size="sm" variant="outline" onClick={() => openEdit(p)} disabled={isPending}>
+                  Edit
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={isPending}
+                  onClick={() => {
+                    if (confirm(`Delete product "${p.name}"?`)) run(() => deleteShopProductAction(p.id), "Product deleted")
+                  }}
+                >
+                  Delete
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {creating && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center" onClick={() => setCreating(false)}>
+          <div
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <p className="font-serif text-xl text-foreground">{editing ? "Edit product" : "Add a shop product"}</p>
+              <button
+                type="button"
+                onClick={() => setCreating(false)}
+                className="rounded-md p-1 text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+                aria-label="Close editor"
+              >
+                <X className="size-4" aria-hidden="true" />
+              </button>
+            </div>
+            <form action={submit} className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="spName">Product name</Label>
+                <Input id="spName" name="name" required maxLength={120} defaultValue={editing?.name ?? ""} placeholder="Printed notes bundle" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="spDesc">Description</Label>
+                <Textarea id="spDesc" name="description" rows={2} maxLength={2000} defaultValue={editing?.description ?? ""} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="spPrice">Price (₹)</Label>
+                  <Input id="spPrice" name="price" type="number" min="0" step="1" required defaultValue={editing ? editing.price_cents / 100 : ""} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Category</Label>
+                  <Select name="category" defaultValue={editing?.category ?? "essentials"}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(SHOP_CATEGORY_LABELS).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Availability</Label>
+                <Select name="availability" defaultValue={editing?.availability ?? "in_stock"}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SHOP_AVAILABILITY.map((a) => (
+                      <SelectItem key={a} value={a}>
+                        {a.replace("_", " ")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Photos</Label>
+                <FileUpload
+                  accept="image"
+                  multiple
+                  maxFiles={6}
+                  value={images}
+                  onChange={(v) => setImages(v as string[])}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="spDelivery">Delivery info (optional)</Label>
+                <Textarea id="spDelivery" name="deliveryInfo" rows={2} maxLength={500} defaultValue={editing?.delivery_info ?? ""} placeholder="Pickup from the campus store, 10am–4pm" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="spPayment">Payment info (optional)</Label>
+                <Textarea id="spPayment" name="paymentInfo" rows={2} maxLength={500} defaultValue={editing?.payment_info ?? ""} placeholder="Pay on pickup or UPI" />
+              </div>
+              <div className="flex items-center gap-2">
+                <input id="spActive" name="active" type="checkbox" defaultChecked={editing ? editing.active : true} className="size-4" />
+                <Label htmlFor="spActive" className="text-sm font-normal">
+                  Visible in the shop
+                </Label>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button type="submit" size="sm" disabled={isPending}>
+                  {editing ? "Save changes" : "Create product"}
+                </Button>
+                <Button type="button" size="sm" variant="ghost" onClick={() => setCreating(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   )

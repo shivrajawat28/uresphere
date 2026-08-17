@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { createEventAction, deleteEventAction, updateEventAction } from "@/lib/actions/admin"
+import { FileUpload } from "@/components/ui/file-upload"
 import { toast } from "sonner"
 
 type EventRow = {
@@ -172,6 +173,7 @@ function EventForm({
   onSubmit: (fd: FormData) => void
 }) {
   const [busy, startTransition] = useTransition()
+  const [imageUrl, setImageUrl] = useState(initial?.image_url ?? "")
   return (
     <form
       onSubmit={(e) => {
@@ -179,6 +181,7 @@ function EventForm({
         const fd = new FormData(e.currentTarget)
         fd.set("sphereId", sphereId)
         if (initial) fd.set("id", initial.id)
+        if (imageUrl) fd.set("imageUrl", imageUrl)
         startTransition(() => onSubmit(fd))
       }}
       className="mb-3 grid gap-3 rounded-lg border border-border/70 bg-secondary/20 p-4 sm:grid-cols-2"
@@ -208,8 +211,13 @@ function EventForm({
         <Textarea id="evDesc" name="description" rows={2} defaultValue={initial?.description ?? ""} />
       </div>
       <div className="space-y-1.5 sm:col-span-2">
-        <Label htmlFor="evImg">Image URL (optional)</Label>
-        <Input id="evImg" name="imageUrl" defaultValue={initial?.image_url ?? ""} placeholder="https://…" />
+        <Label>Event image (optional)</Label>
+        <FileUpload
+          accept="image"
+          value={imageUrl}
+          onChange={(v) => setImageUrl(v as string)}
+          label="Event image"
+        />
       </div>
       <div className="flex gap-2 sm:col-span-2">
         <Button type="submit" size="sm" disabled={busy || isPending} className="gap-2">

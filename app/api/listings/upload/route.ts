@@ -1,16 +1,17 @@
 import { put } from "@vercel/blob"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { ALLOWED_IMAGE_TYPES, MAX_FILE_BYTES, sniffImageType } from "@/lib/uploads"
+import { ALLOWED_IMAGE_TYPES, MAX_FILE_BYTES, isAllowedUploadOrigin, sniffImageType } from "@/lib/uploads"
 
 export async function POST(request: NextRequest) {
   // Reject cross-origin requests (CSRF defense for a state-changing endpoint).
+  // Compares the browser Origin against the canonical app URL AND the origin
+  // the request was actually sent to, so uploads work in local development,
+  // behind tunnels, and on Vercel preview deployments without weakening the
+  // check (a cross-site attacker's Origin never matches either).
   const origin = request.headers.get("origin")
-  if (origin) {
-    const allowed = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin
-    if (!origin.startsWith(allowed)) {
-      return NextResponse.json({ error: "Cross-origin request rejected" }, { status: 403 })
-    }
+  if (!isAllowedUploadOrigin(origin, request.url)) {
+    return NextResponse.json({ error: "Cross-origin request rejected" }, { status: 403 })
   }
 
   const supabase = await createClient()

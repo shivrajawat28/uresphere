@@ -2,6 +2,7 @@ import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Fraunces, Geist } from 'next/font/google'
 import { Toaster } from '@/components/ui/sonner'
+import { getMetadataBase } from '@/lib/site-url'
 import { ThemeProvider } from './theme-provider'
 import './globals.css'
 
@@ -18,19 +19,26 @@ const geist = Geist({
 })
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'),
+  // Resolves to https://uresphere.in in production, http://localhost:3000 in
+  // development. Never a Vercel preview domain (see lib/site-url.ts).
+  metadataBase: getMetadataBase(),
   title: {
     default: 'UreSphere — Your Campus. Your Sphere. Your Community.',
     template: '%s · UreSphere',
   },
   description:
     'UreSphere is a private, campus-verified community platform. Chat, trade, and organize with people who actually share your college — anonymously.',
+  alternates: {
+    canonical: '/',
+  },
   openGraph: {
     title: 'UreSphere — Your Campus. Your Sphere. Your Community.',
     description:
       'A private community drawn around your campus. Anonymous by design, scoped to your Sphere.',
     type: 'website',
     siteName: 'UreSphere',
+    url: '/',
+    locale: 'en_IN',
   },
   twitter: {
     card: 'summary_large_image',

@@ -30,8 +30,13 @@ export function MarketplaceGrid({
   const [category, setCategory] = useState("all")
   const [createOpen, setCreateOpen] = useState(false)
 
+  // Public cards: active + sold listings everyone sees. Own listings in any
+  // status (pending review / rejected) are also shown to the seller.
   const filtered = useMemo(() => {
     return listings.filter((listing) => {
+      const visibleToUser =
+        listing.status === "active" || listing.status === "sold" || listing.seller_id === currentUserId
+      if (!visibleToUser) return false
       const matchesCategory = category === "all" || listing.category === category
       const matchesQuery =
         query.trim().length === 0 ||
@@ -39,7 +44,7 @@ export function MarketplaceGrid({
         listing.description.toLowerCase().includes(query.toLowerCase())
       return matchesCategory && matchesQuery
     })
-  }, [listings, query, category])
+  }, [listings, query, category, currentUserId])
 
   return (
     <div className="flex flex-col gap-6">
@@ -77,7 +82,7 @@ export function MarketplaceGrid({
           <p className="font-serif text-lg text-foreground">Nothing here yet</p>
           <p className="max-w-sm text-sm text-muted-foreground">
             {listings.length === 0
-              ? "Be the first to list something for your Sphere."
+              ? "Be the first to list something for your Sphere — it goes live after admin review."
               : "Try a different search or category."}
           </p>
         </div>

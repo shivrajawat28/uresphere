@@ -177,19 +177,55 @@ export async function deleteGroupMessageAction(messageId: string): Promise<Actio
 }
 
 /**
- * Admin action: delete a group inside the caller's Sphere (server-gated).
- * Only super admins, Sphere administrators, or holders of the
- * social.manage_groups permission in that Sphere may delete groups.
+ * Removes the caller from a group safely. Leaving deletes only the caller's
+ * own membership row — messages and other members are untouched.
+ * RLS (group_members_delete_self_or_admin) permits the self-delete; the
+ * server re-checks membership before deleting.
+ */
+export async function leaveGroupAction(groupId: string): Promise<ActionResult> {
+  const member = await requireMember()
+  const supabase = await createClient()
+
+  const { data: membership } = await supabase
+    .from("group_members")
+    .select("id")
+    .eq("group_id", groupId)
+    .eq("user_id", member.userId)
+    .maybeSingle()
+  if (!membership) return { error: "You're not a member of this group." }
+
+  const { error } = await supabase.from("group_members").delete().eq("id", membership.id)
+  if (error) return { error: "Couldn't leave the group." }
+
+  revalidatePath("/dashboard/groups")
+  return { error: null }
+}
+
+/**
+ * Admin/owner action: delete a group inside the caller's Sphere (server-gated).
+ * Allowed for the group creator, super admins, Sphere administrators, or
+ * holders of the social.manage_groups permission in that Sphere. Normal
+ * members can never delete a group. Destructive — the UI requires a
+ * confirmation dialog.
  */
 export async function adminDeleteGroupAction(groupId: string): Promise<ActionResult> {
+  const member = await requireMember()
   const supabase = await createClient()
 
   const { data: group } = await supabase
     .from("groups")
-    .select("id, sphere_id")
+    .select("id, sphere_id, created_by")
     .eq("id", groupId)
     .maybeSingle()
   if (!group) return { error: "Group not found." }
+
+  // The creator may delete their own group (RLS allows it via migration 0013).
+  if (group.created_by === member.userId) {
+    const { error } = await supabase.from("groups").delete().eq("id", groupId)
+    if (error) return { error: "Couldn't delete the group." }
+    revalidatePath("/dashboard/groups")
+    return { error: null }
+  }
 
   const gate = await requireSphereAction(group.sphere_id, "social.manage_groups")
   if (!gate.ok) return gate

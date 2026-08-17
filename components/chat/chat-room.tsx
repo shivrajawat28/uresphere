@@ -36,7 +36,6 @@ import {
 } from "lucide-react"
 
 const PAGE_SIZE = 50
-const LONG_PRESS_MS = 500
 
 export function ChatRoom({
   sphereId,
@@ -76,7 +75,6 @@ export function ChatRoom({
   const scrollRef = useRef<HTMLDivElement>(null)
   const handleCache = useRef(new Map<string, string>())
   const subscribedSphere = useRef<string | null>(null)
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // The server loads only the newest window, so the very first thing we do on
   // open is jump to the bottom (instantly, no smooth scroll-through of
   // history). Runs once per mount — closing and reopening the chat always
@@ -489,18 +487,11 @@ export function ChatRoom({
     })
   }
 
-  // Long-press (touch) opens the message action menu; a short tap or a drag
-  // (scrolling) cancels it. Desktop keeps hover + click.
-  function startLongPress(id: string) {
-    if (typeof window === "undefined" || !window.matchMedia("(pointer: coarse)").matches) return
-    longPressTimer.current = setTimeout(() => setOpenMenuId(id), LONG_PRESS_MS)
-  }
-  function cancelLongPress() {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current)
-      longPressTimer.current = null
-    }
-  }
+  // The message action menu opens from the three-dot button only. There is no
+  // row-level long-press: a pointerdown on the row used to start a delayed
+  // open that re-opened the menu after the user's tap closed it, which is why
+  // closing sometimes took several taps. The three-dot button stops
+  // propagation so no other handler can interfere with a single tap.
 
   const sorted = useMemo(() => mergeChatMessages([], messages), [messages])
 
@@ -514,7 +505,15 @@ export function ChatRoom({
         </div>
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 md:px-8">
+      <div
+        ref={scrollRef}
+        onScroll={() => {
+          // Scrolling the message list closes any open action menu so it can
+          // never end up detached from its message mid-scroll.
+          if (openMenuId) setOpenMenuId(null)
+        }}
+        className="flex-1 overflow-y-auto px-4 py-6 md:px-8"
+      >
         <div className="mx-auto max-w-2xl space-y-4">
           {hasMore && (
             <div className="flex justify-center">
@@ -540,10 +539,6 @@ export function ChatRoom({
                 className={`group flex flex-col ${isSelf ? "items-end" : "items-start"} ${
                   highlightedId === m.id ? "rounded-xl bg-primary/10 ring-1 ring-primary/40" : ""
                 }`}
-                onPointerDown={() => startLongPress(m.id)}
-                onPointerUp={cancelLongPress}
-                onPointerMove={cancelLongPress}
-                onPointerLeave={cancelLongPress}
               >
                 <div className="mb-1 flex items-center gap-2 px-1">
                   <span className="font-mono text-[11px] text-muted-foreground">
@@ -597,13 +592,20 @@ export function ChatRoom({
                     <DropdownMenu open={openMenuId === m.id} onOpenChange={(open) => setOpenMenuId(open ? m.id : null)}>
                       <DropdownMenuTrigger asChild>
                         <button
+                          type="button"
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => e.stopPropagation()}
                           className="mt-1 rounded p-1 text-muted-foreground transition hover:text-foreground md:opacity-0 md:group-hover:opacity-100"
                           aria-label="Message options"
                         >
                           <MoreVertical className="size-3.5" />
                         </button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align={isSelf ? "end" : "start"}>
+                      {/* The menu anchors to the three-dot button (Base UI
+                          floating positioning with viewport collision
+                          handling), so it always appears next to the message
+                          — never detached at the top of the page. */}
+                      <DropdownMenuContent align={isSelf ? "end" : "start"} side="bottom" sideOffset={4}>
                         <DropdownMenuItem
                           onClick={() => {
                             setReplyTarget(m)

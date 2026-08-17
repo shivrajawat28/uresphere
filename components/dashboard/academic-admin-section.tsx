@@ -48,6 +48,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react"
+import { FileUpload } from "@/components/ui/file-upload"
 import { toast } from "sonner"
 
 const TYPE_LABELS: Record<string, string> = {
@@ -106,6 +107,7 @@ export function AcademicAdminSectionClient({
   const [uploadOpen, setUploadOpen] = useState(false)
   const [editingResource, setEditingResource] = useState<Resource | null>(null)
   const [resourceSubjectId, setResourceSubjectId] = useState<string>("")
+  const [resourceUrl, setResourceUrl] = useState("")
 
   // Calendar state
   const [calendarOpen, setCalendarOpen] = useState(false)
@@ -310,6 +312,7 @@ export function AcademicAdminSectionClient({
               className="gap-1.5"
               onClick={() => {
                 setEditingResource(null)
+                setResourceUrl("")
                 setUploadOpen(true)
               }}
             >
@@ -366,6 +369,7 @@ export function AcademicAdminSectionClient({
                           disabled={isPending}
                           onClick={() => {
                             setEditingResource(r)
+                            setResourceUrl(r.url)
                             setUploadOpen(true)
                           }}
                           aria-label={`Edit ${r.title}`}
@@ -567,17 +571,18 @@ export function AcademicAdminSectionClient({
             </DialogDescription>
           </DialogHeader>
           <form
-            action={(formData) =>
-              run(async () => {
-                formData.set("sphereId", sphereId)
-                formData.set("subjectId", editingResource?.subject_id ?? effectiveResourceSubject)
+            action={(formData) => {
+              formData.set("sphereId", sphereId)
+              formData.set("subjectId", editingResource?.subject_id ?? effectiveResourceSubject)
+              if (resourceUrl) formData.set("url", resourceUrl)
+              return run(async () => {
                 const r = editingResource
                   ? await updateResourceAction(formData)
                   : await uploadResourceAction(formData)
                 if (!r.error) setUploadOpen(false)
                 return r
               }, editingResource ? "Resource updated" : "Resource uploaded")
-            }
+            }}
             className="flex flex-col gap-4"
           >
             {editingResource && <input type="hidden" name="id" value={editingResource.id} />}
@@ -601,8 +606,14 @@ export function AcademicAdminSectionClient({
               </Select>
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="acResUrl">File or document URL</Label>
-              <Input id="acResUrl" name="url" type="url" required defaultValue={editingResource?.url ?? ""} placeholder="https://..." />
+              <Label>File (PDF, notes, images)</Label>
+              <FileUpload
+                accept="image,pdf"
+                value={resourceUrl}
+                onChange={(v) => setResourceUrl(v as string)}
+                label="Resource file"
+              />
+              <p className="text-xs text-muted-foreground">Upload a PDF or image from your device, or paste a link.</p>
             </div>
             <DialogFooter>
               <DialogClose asChild>

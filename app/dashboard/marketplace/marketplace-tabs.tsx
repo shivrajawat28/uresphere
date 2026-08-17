@@ -1,20 +1,25 @@
 "use client"
 
 import { useState } from "react"
-import { Package, ShoppingBag, ShoppingCart } from "lucide-react"
+import { Package, ShieldCheck, ShoppingBag, ShoppingCart } from "lucide-react"
 import { MarketplaceGrid } from "@/components/marketplace/marketplace-grid"
 import { ShopGrid } from "@/components/marketplace/shop-grid"
+import { CartSection } from "@/components/marketplace/cart-section"
+import { MarketplaceAdminReview } from "@/components/marketplace/admin-review"
 import { OrdersSection } from "@/components/marketplace/orders-section"
 import { AdCard } from "@/components/ads/ad-card"
 import type { AdCampaign } from "@/lib/ads"
-import type { Listing, Order, ShopProduct } from "@/app/dashboard/marketplace/page"
+import type { CartItem, Listing, Order, ShopProduct } from "@/app/dashboard/marketplace/page"
 
-type Tab = "shop" | "marketplace" | "orders"
+type Tab = "marketplace" | "shop" | "cart" | "orders"
 
 export function MarketplaceTabs({
   listings,
   products,
   orders,
+  cartItems,
+  pendingListings,
+  canReviewListings,
   orderStatusLabels,
   currentUserId,
   sphereName,
@@ -23,6 +28,9 @@ export function MarketplaceTabs({
   listings: Listing[]
   products: ShopProduct[]
   orders: Order[]
+  cartItems: CartItem[]
+  pendingListings: (Listing & { sellerHandle: string })[]
+  canReviewListings: boolean
   orderStatusLabels: Record<string, string>
   currentUserId: string
   sphereName: string
@@ -30,9 +38,10 @@ export function MarketplaceTabs({
 }) {
   const [tab, setTab] = useState<Tab>("marketplace")
 
-  const tabs: { id: Tab; label: string; icon: typeof Package }[] = [
+  const tabs: { id: Tab; label: string; icon: typeof Package; badge?: number }[] = [
     { id: "marketplace", label: "Your Marketplace", icon: ShoppingBag },
     { id: "shop", label: "UreSphere Shop", icon: Package },
+    { id: "cart", label: "Cart", icon: ShoppingCart, badge: cartItems.length },
     { id: "orders", label: "My orders", icon: ShoppingCart },
   ]
 
@@ -64,13 +73,32 @@ export function MarketplaceTabs({
           >
             <t.icon className="size-4" />
             {t.label}
+            {typeof t.badge === "number" && t.badge > 0 && (
+              <span className="inline-flex size-5 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
+                {t.badge > 99 ? "99+" : t.badge}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
-      {tab === "marketplace" && <MarketplaceGrid listings={listings} currentUserId={currentUserId} />}
+      {tab === "marketplace" && (
+        <>
+          {canReviewListings && <MarketplaceAdminReview pendingListings={pendingListings} />}
+          <MarketplaceGrid listings={listings} currentUserId={currentUserId} />
+        </>
+      )}
       {tab === "shop" && <ShopGrid products={products} />}
-      {tab === "orders" && <OrdersSection orders={orders} orderStatusLabels={orderStatusLabels} currentUserId={currentUserId} />}
+      {tab === "cart" && <CartSection cartItems={cartItems} />}
+      {tab === "orders" && (
+        <OrdersSection orders={orders} orderStatusLabels={orderStatusLabels} currentUserId={currentUserId} />
+      )}
+
+      {tab === "orders" && orders.length === 0 && (
+        <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+          <ShieldCheck className="size-3.5" /> Orders are only visible to you, the seller, and your Sphere&apos;s admins.
+        </p>
+      )}
     </div>
   )
 }

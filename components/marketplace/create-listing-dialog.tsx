@@ -86,7 +86,7 @@ export function CreateListingDialog({
       if (result.error) {
         toast.error(result.error)
       } else {
-        toast.success("Listing published")
+        toast.success("Listing submitted for review — it goes live after an admin approves it")
         setImages([])
         onOpenChange(false)
       }
@@ -98,7 +98,9 @@ export function CreateListingDialog({
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>List an item</DialogTitle>
-          <DialogDescription>Visible only to verified members of your Sphere.</DialogDescription>
+          <DialogDescription>
+            Visible only to verified members of your Sphere. Listings go live after admin review.
+          </DialogDescription>
         </DialogHeader>
 
         <form action={handleSubmit} className="flex flex-col gap-4">

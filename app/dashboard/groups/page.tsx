@@ -41,7 +41,7 @@ export default async function GroupsPage({
           .limit(51)
       : { data: null },
     group
-      ? supabase.from("groups").select("id, name").eq("id", group).eq("sphere_id", member.sphereId).maybeSingle()
+      ? supabase.from("groups").select("id, name, created_by").eq("id", group).eq("sphere_id", member.sphereId).maybeSingle()
       : { data: null },
     group
       ? supabase.from("group_members").select("user_id").eq("group_id", group)
@@ -73,6 +73,7 @@ export default async function GroupsPage({
     ? {
         id: groupResult.data.id,
         name: groupResult.data.name,
+        created_by: groupResult.data.created_by,
         isMember: Array.isArray(groupMembersResult.data)
           ? groupMembersResult.data.some((m) => m.user_id === member.userId)
           : false,

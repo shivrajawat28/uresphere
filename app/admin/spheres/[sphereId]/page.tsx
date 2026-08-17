@@ -37,6 +37,7 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
     subjectsResult,
     resourcesResult,
     ordersResult,
+    shopProductsResult,
     auditResult,
     messagesResult,
     groupsResult,
@@ -111,6 +112,12 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
       .order("created_at", { ascending: false })
       .limit(100),
     supabase
+      .from("shop_products")
+      .select("id, name, description, category, price_cents, image_urls, availability, active, delivery_info, payment_info")
+      .eq("sphere_id", sphereId)
+      .order("created_at", { ascending: false })
+      .limit(100),
+    supabase
       .from("audit_logs")
       .select("id, admin_id, action, entity_type, details, created_at")
       .eq("sphere_id", sphereId)
@@ -145,9 +152,19 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
   const { data: profileRows } = memberIds.length
     ? await supabase
         .from("profiles")
-        .select("id, email, real_name, phone, role, account_status")
+        .select("id, email, real_name, phone, college_year, role, account_status")
         .in("id", memberIds)
-    : { data: [] as { id: string; email: string; real_name: string; phone: string; role: string; account_status: string }[] }
+    : {
+        data: [] as {
+          id: string
+          email: string
+          real_name: string
+          phone: string
+          college_year: string
+          role: string
+          account_status: string
+        }[],
+      }
   const profileById = new Map((profileRows ?? []).map((p) => [p.id, p]))
 
   const users = userRows.map((u) => {
@@ -160,6 +177,7 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
       realName: p?.real_name || "—",
       email: p?.email || "—",
       phone: p?.phone || "—",
+      collegeYear: p?.college_year || "",
       role: p?.role || "user",
       accountStatus: p?.account_status || "active",
     }
@@ -294,6 +312,18 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
         settlement_cents: o.settlement_cents,
         status: o.status,
         created_at: o.created_at,
+      }))}
+      shopProducts={(shopProductsResult.data ?? []).map((p) => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        category: p.category,
+        price_cents: p.price_cents,
+        image_urls: p.image_urls,
+        availability: p.availability,
+        active: p.active,
+        delivery_info: p.delivery_info,
+        payment_info: p.payment_info,
       }))}
       auditLogs={(auditResult.data ?? []).map((a) => ({
         id: a.id,

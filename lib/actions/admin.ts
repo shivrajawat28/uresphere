@@ -281,10 +281,32 @@ export async function removeListingAction(listingId: string, imageUrls: string[]
 
 const GLOBAL_CATEGORIES = ["hostel", "pg", "cafe", "restaurant", "gym", "services", "business", "other"] as const
 
+/**
+ * Global listings are managed by the super admin OR any user holding a
+ * listing_manager role assignment (platform-level per the spec). Checked
+ * server-side and enforced by RLS via is_listing_manager().
+ */
+async function canManageGlobalListings(
+  member: CurrentMember,
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<boolean> {
+  if (member.role === "super_admin") return true
+  const { data: assignment } = await supabase
+    .from("role_assignments")
+    .select("id")
+    .eq("user_id", member.userId)
+    .eq("role", "listing_manager")
+    .limit(1)
+    .maybeSingle()
+  return Boolean(assignment)
+}
+
 export async function upsertGlobalListingAction(formData: FormData): Promise<ActionResult> {
   const admin = await requireAdmin()
   const supabase = await createClient()
-  if (admin.role !== "super_admin") return { error: "Only platform admins can manage global listings." }
+  if (!(await canManageGlobalListings(admin, supabase))) {
+    return { error: "Only platform admins or listing managers can manage global listings." }
+  }
 
   const id = String(formData.get("id") ?? "")
   const title = String(formData.get("title") ?? "").trim()
@@ -317,6 +339,8 @@ export async function upsertGlobalListingAction(formData: FormData): Promise<Act
     imageUrls = []
   }
 
+  const status = String(formData.get("status") ?? "active") === "active" ? "active" : "hidden"
+
   const payload = {
     title,
     description,
@@ -326,7 +350,7 @@ export async function upsertGlobalListingAction(formData: FormData): Promise<Act
     city,
     contact,
     image_urls: imageUrls,
-    status: "active" as const,
+    status,
   }
 
   if (id) {
@@ -345,13 +369,34 @@ export async function upsertGlobalListingAction(formData: FormData): Promise<Act
 
   revalidatePath("/admin")
   revalidatePath("/dashboard/global-listings")
+  revalidatePath("/dashboard/global-listings/admin")
+  return { error: null }
+}
+
+/** Publish / unpublish toggle (active = visible to all users). */
+export async function setGlobalListingStatusAction(listingId: string, status: "active" | "hidden"): Promise<ActionResult> {
+  const admin = await requireAdmin()
+  const supabase = await createClient()
+  if (!(await canManageGlobalListings(admin, supabase))) {
+    return { error: "Only platform admins or listing managers can manage global listings." }
+  }
+
+  const { error } = await supabase.from("global_listings").update({ status }).eq("id", listingId)
+  if (error) return { error: "Couldn't update the listing status." }
+
+  await logAudit(supabase, admin.userId, null, `global_listing_${status}`, "global_listing", listingId)
+  revalidatePath("/admin")
+  revalidatePath("/dashboard/global-listings")
+  revalidatePath("/dashboard/global-listings/admin")
   return { error: null }
 }
 
 export async function deleteGlobalListingAction(listingId: string, imageUrls: string[]): Promise<ActionResult> {
   const admin = await requireAdmin()
   const supabase = await createClient()
-  if (admin.role !== "super_admin") return { error: "Only platform admins can manage global listings." }
+  if (!(await canManageGlobalListings(admin, supabase))) {
+    return { error: "Only platform admins or listing managers can manage global listings." }
+  }
 
   const { error } = await supabase.from("global_listings").delete().eq("id", listingId)
   if (error) return { error: "Couldn't delete the listing." }
@@ -461,6 +506,56 @@ export async function createClubAction(formData: FormData): Promise<ActionResult
   await logAudit(supabase, gate.member.userId, sphereId, "club_created", "club")
   for (const p of spherePaths(sphereId)) revalidatePath(p)
   revalidatePath("/dashboard/clubs")
+  return { error: null }
+}
+
+export async function updateClubAction(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const id = String(formData.get("id") ?? "")
+  const name = String(formData.get("name") ?? "").trim()
+  const description = String(formData.get("description") ?? "").trim()
+  const imageUrl = String(formData.get("imageUrl") ?? "").trim() || null
+
+  if (!id) return { error: "Missing club." }
+  if (name.length < 1 || name.length > 120) return { error: "Club name must be 1–120 characters." }
+
+  const { data: club } = await supabase.from("clubs").select("id, sphere_id").eq("id", id).maybeSingle()
+  if (!club) return { error: "Club not found." }
+
+  const gate = await requireSphereAction(club.sphere_id, "clubs.update")
+  if (!gate.ok) return gate
+
+  const { error } = await supabase
+    .from("clubs")
+    .update({ name, description, logo_url: imageUrl })
+    .eq("id", id)
+  if (error) return { error: "Couldn't update the club." }
+
+  await logAudit(supabase, gate.member.userId, club.sphere_id, "club_updated", "club", id)
+  for (const p of spherePaths(club.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/clubs")
+  revalidatePath("/dashboard/clubs/admin")
+  return { error: null }
+}
+
+export async function removeClubMemberAction(clubId: string, userId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const { data: club } = await supabase.from("clubs").select("id, sphere_id").eq("id", clubId).maybeSingle()
+  if (!club) return { error: "Club not found." }
+
+  const gate = await requireSphereAction(club.sphere_id, "clubs.update")
+  if (!gate.ok) return gate
+  if (userId === gate.member.userId) return { error: "You can't remove yourself." }
+
+  const { error } = await supabase.from("club_members").delete().eq("club_id", clubId).eq("user_id", userId)
+  if (error) return { error: "Couldn't remove the member." }
+
+  await logAudit(supabase, gate.member.userId, club.sphere_id, "club_member_removed", "club", clubId, { user_id: userId })
+  for (const p of spherePaths(club.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/clubs")
+  revalidatePath("/dashboard/clubs/admin")
   return { error: null }
 }
 

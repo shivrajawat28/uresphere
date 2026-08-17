@@ -4,12 +4,18 @@ import { revalidatePath } from "next/cache"
 import { del } from "@vercel/blob"
 import { createClient } from "@/lib/supabase/server"
 import { requireMember } from "@/lib/data/session"
+import { requireSphereAction } from "@/lib/actions/admin"
 
 const CATEGORIES = ["books", "calculators", "cycles", "electronics", "college_supplies", "other"] as const
 const CONDITIONS = ["new", "like_new", "used", "fair"] as const
 
 export type ActionResult = { error: string | null }
 
+/**
+ * Creates a listing in the PENDING review queue. It only becomes visible to
+ * other members after an admin approves it — a normal user's listing never
+ * appears directly on the public Marketplace (Part 6).
+ */
 export async function createListingAction(formData: FormData): Promise<ActionResult> {
   const member = await requireMember()
   const supabase = await createClient()
@@ -49,21 +55,233 @@ export async function createListingAction(formData: FormData): Promise<ActionRes
     imageUrls = []
   }
 
-  const { error } = await supabase.from("marketplace_listings").insert({
-    sphere_id: member.sphereId,
-    seller_id: member.userId,
-    title,
-    description,
-    price_cents: priceCents,
-    category,
-    condition,
-    image_urls: imageUrls,
+  const { data: inserted, error } = await supabase
+    .from("marketplace_listings")
+    .insert({
+      sphere_id: member.sphereId,
+      seller_id: member.userId,
+      title,
+      description,
+      price_cents: priceCents,
+      category,
+      condition,
+      image_urls: imageUrls,
+      status: "pending",
+    })
+    .select("id")
+    .single()
+
+  if (error || !inserted) {
+    console.log("[v0] createListingAction error:", error?.message)
+    return { error: "Couldn't submit your listing — try again." }
+  }
+
+  // Tell the Sphere's administrators a listing is waiting for review.
+  await supabase.rpc("notify_sphere_admins", {
+    p_sphere_id: member.sphereId,
+    p_type: "listing_submitted",
+    p_title: "New marketplace listing to review",
+    p_body: `${member.anonymousHandle} submitted “${title}” for review.`,
+    p_link: "/dashboard/marketplace/admin",
   })
 
-  if (error) {
-    console.log("[v0] createListingAction error:", error.message)
-    return { error: "Couldn't publish your listing — try again." }
+  revalidatePath("/dashboard/marketplace")
+  revalidatePath("/dashboard/marketplace/admin")
+  return { error: null }
+}
+
+/**
+ * Admin review of a pending listing: approve (optionally with a final admin
+ * price) or reject with a reason. Gated server-side — only Sphere admins,
+ * listing managers and marketplace moderators may review; a client can never
+ * approve its own listing.
+ */
+export async function reviewListingAction(
+  listingId: string,
+  decision: "approve" | "reject",
+  adminPriceRaw: string,
+  reason: string,
+): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { data: listing } = await supabase
+    .from("marketplace_listings")
+    .select("id, sphere_id, status, seller_id, title")
+    .eq("id", listingId)
+    .maybeSingle()
+  if (!listing) return { error: "Listing not found." }
+  if (listing.status !== "pending") return { error: "This listing was already reviewed." }
+
+  // listing_manager / marketplace_moderator may review (listings.update +
+  // marketplace.review permissions cover them; sphere admins pass through).
+  let gate = await requireSphereAction(listing.sphere_id, "listings.update")
+  if (!gate.ok) gate = await requireSphereAction(listing.sphere_id, "marketplace.review")
+  if (!gate.ok) return gate
+
+  let adminPriceCents: number | null = null
+  if (decision === "approve" && adminPriceRaw.trim()) {
+    const p = Number.parseFloat(adminPriceRaw.trim())
+    if (!Number.isFinite(p) || p < 0) return { error: "Enter a valid, non-negative final price." }
+    adminPriceCents = Math.round(p * 100)
   }
+
+  if (decision === "approve") {
+    const { error } = await supabase
+      .from("marketplace_listings")
+      .update({
+        status: "active",
+        reviewed_by: gate.member.userId,
+        reviewed_at: new Date().toISOString(),
+        admin_price_cents: adminPriceCents,
+        rejection_reason: "",
+      })
+      .eq("id", listingId)
+    if (error) return { error: "Couldn't approve the listing." }
+
+    await supabase.rpc("notify_user", {
+      p_user_id: listing.seller_id,
+      p_type: "listing_approved",
+      p_title: "Your listing is live",
+      p_body: `“${listing.title}” was approved and is now visible in the Marketplace.`,
+      p_link: "/dashboard/marketplace",
+    })
+  } else {
+    const cleanReason = reason.trim().slice(0, 300)
+    const { error } = await supabase
+      .from("marketplace_listings")
+      .update({
+        status: "removed",
+        reviewed_by: gate.member.userId,
+        reviewed_at: new Date().toISOString(),
+        rejection_reason: cleanReason || "Not approved",
+      })
+      .eq("id", listingId)
+    if (error) return { error: "Couldn't reject the listing." }
+
+    await supabase.rpc("notify_user", {
+      p_user_id: listing.seller_id,
+      p_type: "listing_rejected",
+      p_title: "Your listing wasn't approved",
+      p_body: cleanReason ? `Reason: ${cleanReason}` : "Your listing was rejected and won't be published.",
+      p_link: "/dashboard/marketplace",
+    })
+  }
+
+  revalidatePath("/dashboard/marketplace")
+  revalidatePath("/dashboard/marketplace/admin")
+  revalidatePath(`/admin/spheres/${listing.sphere_id}`)
+  return { error: null }
+}
+
+// ---------------------------------------------------------------------------
+// Cart (Part 7) — rows are RLS-scoped to the buyer; pricing is never trusted
+// from the client (quantities only; prices are read from the DB at checkout).
+// ---------------------------------------------------------------------------
+
+export async function addToCartAction(listingId: string, quantity: number): Promise<ActionResult> {
+  const member = await requireMember()
+  const qty = Number.isInteger(quantity) && quantity > 0 ? Math.min(quantity, 20) : 1
+  if (!member.sphereId) return { error: "Not a member of a Sphere." }
+
+  const supabase = await createClient()
+  const { data: listing } = await supabase
+    .from("marketplace_listings")
+    .select("id, status, seller_id")
+    .eq("id", listingId)
+    .eq("sphere_id", member.sphereId)
+    .maybeSingle()
+  if (!listing) return { error: "Listing not found in your Sphere." }
+  if (listing.status !== "active") return { error: "This item is no longer available." }
+  if (listing.seller_id === member.userId) return { error: "You can't add your own listing to the cart." }
+
+  const { error } = await supabase.from("cart_items").upsert(
+    { user_id: member.userId, listing_id: listingId, quantity: qty },
+    { onConflict: "user_id,listing_id" },
+  )
+  if (error) return { error: "Couldn't add the item to your cart." }
+
+  revalidatePath("/dashboard/marketplace")
+  return { error: null }
+}
+
+export async function updateCartQuantityAction(itemId: string, quantity: number): Promise<ActionResult> {
+  const member = await requireMember()
+  const qty = Number.isInteger(quantity) ? Math.max(1, Math.min(quantity, 20)) : 1
+  const supabase = await createClient()
+
+  // Own-row guard is enforced by RLS; double-check ownership server-side too.
+  const { data: item } = await supabase.from("cart_items").select("id").eq("id", itemId).eq("user_id", member.userId).maybeSingle()
+  if (!item) return { error: "Cart item not found." }
+
+  const { error } = await supabase.from("cart_items").update({ quantity: qty }).eq("id", itemId)
+  if (error) return { error: "Couldn't update the quantity." }
+  revalidatePath("/dashboard/marketplace")
+  return { error: null }
+}
+
+export async function removeFromCartAction(itemId: string): Promise<ActionResult> {
+  const member = await requireMember()
+  const supabase = await createClient()
+  const { data: item } = await supabase.from("cart_items").select("id").eq("id", itemId).eq("user_id", member.userId).maybeSingle()
+  if (!item) return { error: "Cart item not found." }
+
+  const { error } = await supabase.from("cart_items").delete().eq("id", itemId)
+  if (error) return { error: "Couldn't remove the item." }
+  revalidatePath("/dashboard/marketplace")
+  return { error: null }
+}
+
+/**
+ * Checkout: reads the buyer's cart, then hands the listing ids + quantities
+ * to the SECURITY DEFINER checkout_cart RPC which re-reads prices from the DB,
+ * creates one order per seller, stores per-item snapshots, marks every
+ * purchased listing sold atomically (duplicate-purchase safe), and rejects
+ * unavailable items — the client can never change a price or buy a sold item.
+ */
+export async function checkoutCartAction(formData: FormData): Promise<ActionResult> {
+  const member = await requireMember()
+  if (!member.sphereId) return { error: "Not a member of a Sphere." }
+
+  const buyerName = String(formData.get("buyerName") ?? "").trim()
+  const buyerPhone = String(formData.get("buyerPhone") ?? "").trim()
+  const address = String(formData.get("address") ?? "").trim()
+  const deliveryDate = String(formData.get("deliveryDate") ?? "") || null
+  const deliveryTime = String(formData.get("deliveryTime") ?? "").trim()
+
+  if (buyerName.length < 2) return { error: "Please enter your name." }
+  if (buyerPhone.length < 7) return { error: "Please enter a valid phone number." }
+  if (address.length < 5) return { error: "Please enter a delivery address." }
+  if (deliveryTime.length > 200) return { error: "Delivery time is too long." }
+
+  const supabase = await createClient()
+  const { data: cart } = await supabase
+    .from("cart_items")
+    .select("listing_id, quantity")
+    .eq("user_id", member.userId)
+    .not("listing_id", "is", null)
+  const lines = (cart ?? []).filter((c) => c.listing_id)
+  if (lines.length === 0) return { error: "Your cart is empty." }
+
+  const listingIds = lines.map((c) => c.listing_id as string)
+  const quantities = lines.map((c) => c.quantity)
+
+  const { data: rpcResult, error: rpcError } = await supabase.rpc("checkout_cart", {
+    p_buyer_id: member.userId,
+    p_buyer_name: buyerName,
+    p_buyer_phone: buyerPhone,
+    p_address: address,
+    p_delivery_date: deliveryDate,
+    p_delivery_time: deliveryTime,
+    p_listing_ids: listingIds,
+    p_quantities: quantities,
+  })
+
+  if (rpcError) return { error: "Couldn't place your order. Try again." }
+  const first = Array.isArray(rpcResult) && rpcResult.length > 0 ? rpcResult[0] : null
+  if (first?.error) return { error: first.error }
+  if (!first?.order_id) return { error: "Couldn't place your order. Try again." }
+
+  // Clear the purchased lines from the cart (keep any shop items untouched).
+  await supabase.from("cart_items").delete().eq("user_id", member.userId).in("listing_id", listingIds)
 
   revalidatePath("/dashboard/marketplace")
   return { error: null }

@@ -41,6 +41,8 @@ export type SectionAdminFlags = {
   promotions?: boolean
   events?: boolean
   social?: boolean
+  clubs?: boolean
+  globalListings?: boolean
 }
 
 export function DashboardNav({
@@ -91,6 +93,9 @@ export function DashboardNav({
             ? [{ href: "/dashboard/events/admin", label: "Events Admin", icon: CalendarCheck2 }]
             : []),
           { href: "/dashboard/clubs", label: "Clubs", icon: Sparkles },
+          ...(sectionAdmins.clubs
+            ? [{ href: "/dashboard/clubs/admin", label: "Clubs Admin", icon: Sparkles }]
+            : []),
         ],
       },
       {
@@ -107,6 +112,9 @@ export function DashboardNav({
         label: "Other",
         links: [
           { href: "/dashboard/global-listings", label: "Global Listings", icon: Globe },
+          ...(sectionAdmins.globalListings
+            ? [{ href: "/dashboard/global-listings/admin", label: "Global Listings Admin", icon: Globe }]
+            : []),
           { href: "/dashboard/premium", label: "Premium", icon: Gem },
           { href: "/dashboard/notifications", label: "Notifications", icon: Bell, badge: unread },
           { href: "/dashboard/roadmap", label: "Roadmap", icon: Milestone },
@@ -146,10 +154,16 @@ export function DashboardNav({
         ? [{ href: "/dashboard/events/admin", label: "Events Admin", icon: CalendarCheck2 }]
         : []),
       { href: "/dashboard/clubs", label: "Clubs", icon: Sparkles },
+      ...(sectionAdmins.clubs
+        ? [{ href: "/dashboard/clubs/admin", label: "Clubs Admin", icon: Sparkles }]
+        : []),
       ...(sectionAdmins.social
         ? [{ href: "/dashboard/social/admin", label: "Social Admin", icon: MessagesSquare }]
         : []),
       { href: "/dashboard/global-listings", label: "Global Listings", icon: Globe },
+      ...(sectionAdmins.globalListings
+        ? [{ href: "/dashboard/global-listings/admin", label: "Global Listings Admin", icon: Globe }]
+        : []),
       { href: "/dashboard/premium", label: "Premium", icon: Gem },
       { href: "/dashboard/roadmap", label: "Roadmap", icon: Milestone },
       { href: "/dashboard/feedback", label: "Feedback", icon: MessageSquareText },

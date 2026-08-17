@@ -16,19 +16,24 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   // Cheap, index-backed unread count (notifications_user_idx) so the sidebar
   // badge is right on first paint; live updates come via realtime in the nav.
   const supabase = await createClient()
-  const [unreadResult, sectionRoles] = await Promise.all([
+  const [unreadResult, sectionRoles, listingManager] = await Promise.all([
     supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", member.userId).eq("read", false),
     // Section-admin assignments in the member's own Sphere — the user's own
     // rows are readable thanks to the role_assignments_select_own policy. This
     // drives the Academic Admin / Promotions Admin / Events Admin / Social
-    // Admin nav entries from real server-side assignment data.
+    // Admin / Clubs Admin nav entries from real server-side assignment data.
     loadAssignedSectionRoles(member),
+    // Listing Manager is a platform-level role (global listings) — the nav
+    // entry appears when the member holds the assignment in any Sphere.
+    supabase.from("role_assignments").select("id").eq("user_id", member.userId).eq("role", "listing_manager").limit(1).maybeSingle(),
   ])
   const sectionAdmins = {
     academic: sectionRoles.includes("academic_manager"),
     promotions: sectionRoles.includes("promotion_moderator"),
     events: sectionRoles.includes("event_manager"),
     social: sectionRoles.includes("social_moderator"),
+    clubs: sectionRoles.includes("club_manager"),
+    globalListings: Boolean(listingManager) || member.role === "super_admin",
   }
 
   return (

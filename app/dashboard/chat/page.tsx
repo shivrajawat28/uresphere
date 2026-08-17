@@ -44,7 +44,13 @@ export default async function ChatPage() {
   )
 
   return (
-    <div className="flex h-[calc(100svh)] flex-col md:h-svh">
+    // Mobile: the dashboard shell has a sticky top bar (~3.5rem) and a fixed
+    // bottom nav cleared with pb-24 (6rem). 100svh alone would push the
+    // composer below the fold, so the chat fills the visible area minus those
+    // chrome heights. dvh also shrinks when the keyboard opens so the
+    // composer stays reachable on modern mobile browsers. Desktop keeps a
+    // full-viewport height.
+    <div className="flex h-[calc(100dvh-9.5rem)] flex-col md:h-svh">
       {/* Sponsored banner — Social placement (slim strip above the chat). */}
       <div className="mx-auto w-full max-w-2xl shrink-0 px-4 pt-3">
         <AdBanner placement="social" limit={1} />

@@ -80,15 +80,44 @@ export function OrdersSection({
                       <>Deliver to {order.address}</>
                     )}
                   </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {formatINR(order.price_cents)} · settlement {formatINR(order.settlement_cents)} (fee{" "}
-                    {formatINR(order.fee_cents)}) · by {formatDate(order.delivery_date)}
-                  </p>
                 </div>
                 <Badge variant="outline" className={`shrink-0 border-border/60 ${STATUS_STYLES[order.status] ?? ""}`}>
                   {orderStatusLabels[order.status] ?? order.status}
                 </Badge>
               </div>
+
+              {order.items.length > 0 ? (
+                <div className="mt-3 rounded-md border border-border/60 bg-secondary/20 p-3">
+                  <ul className="space-y-1.5">
+                    {order.items.map((item) => (
+                      <li key={item.id} className="flex items-baseline justify-between gap-3 text-xs">
+                        <span className="min-w-0 truncate text-foreground">
+                          {item.title}
+                          <span className="text-muted-foreground"> × {item.quantity}</span>
+                        </span>
+                        <span className="shrink-0 font-medium text-foreground">
+                          {formatINR(item.unit_price_cents * item.quantity)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-2 flex items-center justify-between border-t border-border/60 pt-2 text-sm font-medium">
+                    <span className="text-foreground">Total</span>
+                    <span className="text-primary">{formatINR(order.total_cents || order.price_cents)}</span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    settlement {formatINR(order.settlement_cents)} (fee {formatINR(order.fee_cents)}) · by{" "}
+                    {formatDate(order.delivery_date)}
+                    {order.delivery_time ? ` · ${order.delivery_time}` : ""}
+                  </p>
+                </div>
+              ) : (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {formatINR(order.price_cents)} · settlement {formatINR(order.settlement_cents)} (fee{" "}
+                  {formatINR(order.fee_cents)}) · by {formatDate(order.delivery_date)}
+                  {order.delivery_time ? ` · ${order.delivery_time}` : ""}
+                </p>
+              )}
 
               {canUpdate && (
                 <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">

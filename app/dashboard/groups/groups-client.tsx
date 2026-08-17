@@ -2,10 +2,13 @@
 
 import { useEffect, useRef, useState, useTransition } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import {
+  adminDeleteGroupAction,
   createGroupAction,
   inviteToGroupAction,
+  leaveGroupAction,
   respondToInviteAction,
   sendGroupMessageAction,
   deleteGroupMessageAction,
@@ -38,6 +41,7 @@ import {
   Trash2,
   ChevronUp,
   Loader2,
+  LogOut,
 } from "lucide-react"
 
 type GroupSummary = {
@@ -74,7 +78,7 @@ export function GroupsClient({
 }: {
   groups: GroupSummary[]
   pendingInvites: Invite[]
-  activeGroup: { id: string; name: string; isMember: boolean } | null
+  activeGroup: { id: string; name: string; created_by: string; isMember: boolean } | null
   initialMessages: Message[]
   initialHasMore: boolean
   initialOldestCreatedAt: string | null
@@ -279,7 +283,7 @@ function GroupChat({
   isAdmin,
   onOpenInvite,
 }: {
-  group: { id: string; name: string; isMember: boolean }
+  group: { id: string; name: string; created_by: string; isMember: boolean }
   initialMessages: Message[]
   initialHasMore: boolean
   initialOldestCreatedAt: string | null
@@ -288,6 +292,35 @@ function GroupChat({
   isAdmin: boolean
   onOpenInvite: () => void
 }) {
+  const router = useRouter()
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [leaveOpen, setLeaveOpen] = useState(false)
+  const isCreator = group.created_by === currentUserId
+  const canDeleteGroup = isCreator || isAdmin
+
+  function handleLeave() {
+    startTransition(async () => {
+      const result = await leaveGroupAction(group.id)
+      if (result.error) toast.error(result.error)
+      else {
+        toast.success("You left the group")
+        setLeaveOpen(false)
+        router.refresh()
+      }
+    })
+  }
+
+  function handleDeleteGroup() {
+    startTransition(async () => {
+      const result = await adminDeleteGroupAction(group.id)
+      if (result.error) toast.error(result.error)
+      else {
+        toast.success("Group deleted")
+        setDeleteOpen(false)
+        router.refresh()
+      }
+    })
+  }
   const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [hasMore, setHasMore] = useState(initialHasMore)
   const [oldestCreatedAt, setOldestCreatedAt] = useState<string | null>(initialOldestCreatedAt)
@@ -470,12 +503,65 @@ function GroupChat({
           <p className="text-xs text-muted-foreground">Private group chat in your Sphere</p>
         </div>
         {group.isMember && (
-          <Button size="sm" variant="outline" className="gap-1.5" onClick={onOpenInvite}>
-            <UserPlus className="size-3.5" />
-            Invite
-          </Button>
+          <div className="flex shrink-0 gap-1.5">
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={onOpenInvite}>
+              <UserPlus className="size-3.5" />
+              Invite
+            </Button>
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setLeaveOpen(true)}>
+              <LogOut className="size-3.5" />
+              Leave
+            </Button>
+            {canDeleteGroup && (
+              <Button size="sm" variant="destructive" className="gap-1.5" onClick={() => setDeleteOpen(true)}>
+                <Trash2 className="size-3.5" />
+                Delete group
+              </Button>
+            )}
+          </div>
         )}
       </div>
+
+      {/* Leave group — confirm before removing membership */}
+      <Dialog open={leaveOpen} onOpenChange={setLeaveOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Leave “{group.name}”?</DialogTitle>
+            <DialogDescription>
+              You&apos;ll no longer see or send messages in this group. Your messages stay visible to remaining
+              members.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="ghost">Cancel</Button>
+            </DialogClose>
+            <Button variant="destructive" onClick={handleLeave} disabled={isPending}>
+              Leave group
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete group — creator/admin only, destructive with confirmation */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete “{group.name}”?</DialogTitle>
+            <DialogDescription>
+              This permanently deletes the group and its message history for everyone. This can&apos;t be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="ghost">Cancel</Button>
+            </DialogClose>
+            <Button variant="destructive" onClick={handleDeleteGroup} disabled={isPending}>
+              Delete group
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {group.isMember ? (
         <>

@@ -28,12 +28,21 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 function makeSignupClient(college: { id: string; status: string } | null) {
-  const maybeSingle = vi.fn().mockResolvedValue({ data: college, error: null })
-  const signUp = vi.fn().mockResolvedValue({ error: null })
-  const from = vi.fn().mockReturnValue({
-    select: vi.fn().mockReturnValue({
-      eq: vi.fn().mockReturnValue({ maybeSingle }),
-    }),
+  // session: null models email confirmation ENABLED — signUp succeeds but no
+  // session is issued, so the action reports needsEmailConfirmation.
+  const signUp = vi.fn().mockResolvedValue({ data: { session: null }, error: null })
+  const from = vi.fn((table: string) => {
+    const select = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        // profiles.phone lookup (duplicate-phone check) returns no row;
+        // colleges lookup returns the configured college.
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: table === "profiles" ? null : college,
+          error: null,
+        }),
+      }),
+    })
+    return { select }
   })
   vi.mocked(createClient).mockReturnValue({ from, auth: { signUp } } as never)
   return { signUp }
@@ -62,7 +71,7 @@ describe("signUpAction", () => {
     expect(credentials.password).toBe("hunter2hunter")
     expect(credentials.options.data.college_id).toBe("c1")
     expect(credentials.options.data.real_name).toBe("Alice Verma")
-    expect(credentials.options.data.phone).toBe("9876543210")
+    expect(credentials.options.data.phone).toBe("+919876543210")
     expect(credentials.options.data.college_input).toBe("ITS Engineering College")
   })
 
@@ -70,6 +79,26 @@ describe("signUpAction", () => {
     const { signUp } = makeSignupClient(null)
     const result = await signUpAction(validSignupFormData("does-not-exist"))
     expect(result.error).toMatch(/Select your college/i)
+    expect(signUp).not.toHaveBeenCalled()
+  })
+
+  it("rejects a phone number that is already linked to an account (one phone = one account)", async () => {
+    const signUp = vi.fn().mockResolvedValue({ data: { session: null }, error: null })
+    const from = vi.fn((table: string) => {
+      const select = vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: table === "profiles" ? { id: "existing-user" } : { id: "c1", status: "active" },
+            error: null,
+          }),
+        }),
+      })
+      return { select }
+    })
+    vi.mocked(createClient).mockReturnValue({ from, auth: { signUp } } as never)
+
+    const result = await signUpAction(validSignupFormData("c1"))
+    expect(result.error).toMatch(/already linked to an account/i)
     expect(signUp).not.toHaveBeenCalled()
   })
 

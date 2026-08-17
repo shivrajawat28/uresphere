@@ -30,7 +30,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { toast } from "sonner"
 import { Search, ArrowLeft, Users, ShieldCheck, Plus, X } from "lucide-react"
-import { OrdersSection } from "../../platform-sections"
+import { OrdersSection, ShopProductsSection } from "../../platform-sections"
 
 type UserRow = {
   userId: string
@@ -40,6 +40,7 @@ type UserRow = {
   realName: string
   email: string
   phone: string
+  collegeYear: string
   role: string
   accountStatus: string
 }
@@ -90,6 +91,18 @@ type OrderRow = {
   status: string
   created_at: string
 }
+type ShopProductRow = {
+  id: string
+  name: string
+  description: string
+  category: string
+  price_cents: number
+  image_urls: string[]
+  availability: string
+  active: boolean
+  delivery_info: string | null
+  payment_info: string | null
+}
 type AuditRow = { id: string; action: string; entity_type: string | null; details: Record<string, unknown>; created_at: string }
 
 export function SphereAdmin({
@@ -111,6 +124,7 @@ export function SphereAdmin({
   subjects,
   resources,
   orders,
+  shopProducts,
   auditLogs,
   messages,
   groups,
@@ -134,6 +148,7 @@ export function SphereAdmin({
   subjects: SubjectRow[]
   resources: ResourceRow[]
   orders: OrderRow[]
+  shopProducts: ShopProductRow[]
   auditLogs: AuditRow[]
   messages: SocialMessage[]
   groups: GroupRow[]
@@ -326,6 +341,7 @@ export function SphereAdmin({
           {can("clubs") && <TabsTrigger value="clubs">Clubs</TabsTrigger>}
           {can("events") && <TabsTrigger value="events">Events</TabsTrigger>}
           {can("marketplace") && <TabsTrigger value="marketplace">Marketplace</TabsTrigger>}
+          {can("marketplace") && <TabsTrigger value="shop">Shop</TabsTrigger>}
           {can("listings") && <TabsTrigger value="listings">Listings</TabsTrigger>}
           {can("promotions") && <TabsTrigger value="promotions">Promotions {stats.pendingPromotions > 0 && `(${stats.pendingPromotions})`}</TabsTrigger>}
           <TabsTrigger value="audit">Audit log</TabsTrigger>
@@ -850,6 +866,13 @@ export function SphereAdmin({
           </TabsContent>
         )}
 
+        {/* Shop — admin-run products */}
+        {can("marketplace") && (
+          <TabsContent value="shop" className="space-y-4">
+            <ShopProductsSection sphereId={sphereId} products={shopProducts} />
+          </TabsContent>
+        )}
+
         {selectedMember && (
           <MemberDetailsModal
             member={selectedMember}
@@ -1112,6 +1135,7 @@ function MemberDetailsModal({
         <dl className="space-y-2 text-sm">
           <DetailRow label="Email" value={member.email} />
           <DetailRow label="Phone" value={member.phone} />
+          {member.collegeYear && <DetailRow label="Current year" value={member.collegeYear} />}
           <DetailRow label="Account status" value={member.accountStatus} />
           <DetailRow label="Profile role" value={member.role.replace("_", " ")} />
           <DetailRow label="Joined" value={new Date(member.joinedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} />
