@@ -217,13 +217,15 @@ function reviewClient({
   const rpc = vi.fn().mockResolvedValue({ error: null })
   const auditInsert = vi.fn().mockResolvedValue({ error: null })
 
-  const raMaybeSingle = vi.fn().mockResolvedValue({ data: assignment, error: null })
-  const raEq2 = vi.fn((col: string, val: string) => {
-    if (col === "sphere_id" && val !== assignmentSphere) {
-      raMaybeSingle.mockResolvedValue({ data: null, error: null })
-    }
-    return { maybeSingle: raMaybeSingle }
-  })
+  // requireSphereAction awaits the query chain directly and expects a row
+  // array (any-assignment semantics) — resolve a thenable instead of maybeSingle.
+  const raEq2 = vi.fn((col: string, val: string) => ({
+    then: (resolve: (v: unknown) => unknown) =>
+      resolve({
+        data: col === "sphere_id" && val !== assignmentSphere ? [] : assignment ? [assignment] : [],
+        error: null,
+      }),
+  }))
 
   const from = vi.fn((table: string) => {
     if (table === "promotions") {

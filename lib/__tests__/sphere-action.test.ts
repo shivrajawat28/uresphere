@@ -50,14 +50,23 @@ const MEMBER: CurrentMember = {
 
 function mockClient(db: { user_spheres?: { data: unknown; error: unknown } | null; role_assignments?: { data: unknown; error: unknown } | null }) {
   const from = vi.fn((table: keyof typeof db & string) => {
-    const result = db[table]
-    return {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      order: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue(result ?? { data: null, error: null }),
+    const result = db[table] ?? { data: null, error: null }
+    const chain = {
+      select: vi.fn(() => chain),
+      eq: vi.fn(() => chain),
+      order: vi.fn(() => chain),
+      limit: vi.fn(() => chain),
+      maybeSingle: vi.fn(() => Promise.resolve({ data: result.data ?? null, error: result.error ?? null })),
+      // requireSphereAction now awaits the query chain directly (multi-row
+      // assignment semantics): resolve a row array. A single row passed by a
+      // test is wrapped; null stays an empty list.
+      then: (resolve: (v: unknown) => unknown) =>
+        resolve({
+          data: Array.isArray(result.data) ? result.data : result.data ? [result.data] : [],
+          error: result.error ?? null,
+        }),
     }
+    return chain
   })
   vi.mocked(createClient).mockReturnValue({ from } as never)
 }
@@ -146,6 +155,72 @@ describe("requireSphereAction — sphere-scoped server action gate", () => {
     requireMemberMock.mockRejectedValue(new Error("NEXT_REDIRECT:/auth/login"))
     await expect(requireSphereAction("s1", "events.create")).rejects.toThrow(/NEXT_REDIRECT/)
     expect(requireMemberMock).toHaveBeenCalled()
+  })
+
+  it("lets a manager with MULTIPLE role assignments act on a granted permission (regression: .maybeSingle() on >1 row denied every action)", async () => {
+    requireMemberMock.mockResolvedValue(MEMBER)
+    // Real live shape: academic_manager + listing_manager + club_manager in
+    // the same Sphere. The academic permission is on the academic_manager row.
+    mockClient({
+      role_assignments: {
+        data: [
+          ASSIGN("club_manager", { permissions: ["clubs.create"] }),
+          ASSIGN("listing_manager", { permissions: ["listings.update"] }),
+          ASSIGN("academic_manager", {
+            permissions: ["academic.read", "academic.create", "academic.update", "academic.delete"],
+            sections: [{ degree: "Btech", year: "2", branch: "CSE-Core and Applied Branches" }],
+            degree: "Btech",
+            year: "2",
+            branch: "CSE-Core and Applied Branches",
+          }),
+        ],
+        error: null,
+      },
+    })
+    const gate = await requireSphereAction("s1", "academic.create", {
+      degree: "Btech",
+      year: "2",
+      branch: "CSE-Core and Applied Branches",
+    })
+    expect(gate.ok).toBe(true)
+  })
+
+  it("still denies an out-of-scope target when the manager holds multiple assignments", async () => {
+    requireMemberMock.mockResolvedValue(MEMBER)
+    mockClient({
+      role_assignments: {
+        data: [
+          ASSIGN("club_manager", { permissions: ["clubs.create"] }),
+          ASSIGN("academic_manager", {
+            permissions: ["academic.create"],
+            sections: [{ degree: "Btech", year: "2", branch: "CSE" }],
+            degree: "Btech",
+            year: "2",
+            branch: "CSE",
+          }),
+        ],
+        error: null,
+      },
+    })
+    const gate = await requireSphereAction("s1", "academic.create", { degree: "Btech", year: "1", branch: "CSE" })
+    expect(gate.ok).toBe(false)
+    if (!gate.ok) expect(gate.error).toMatch(/scope/)
+  })
+
+  it("denies when no assignment grants the permission even with multiple assignments", async () => {
+    requireMemberMock.mockResolvedValue(MEMBER)
+    mockClient({
+      role_assignments: {
+        data: [
+          ASSIGN("club_manager", { permissions: ["clubs.create"] }),
+          ASSIGN("academic_manager", { permissions: ["academic.create"], degree: "btech", year: "2", branch: "cse" }),
+        ],
+        error: null,
+      },
+    })
+    const gate = await requireSphereAction("s1", "events.create")
+    expect(gate.ok).toBe(false)
+    if (!gate.ok) expect(gate.error).toMatch(/permission/)
   })
 })
 

@@ -72,32 +72,36 @@ export async function requirePermission(
   if (member.role === "admin" || member.role === "super_admin") return { ok: true, member }
 
   const supabase = await createClient()
-  // A user may hold several assignments in one Sphere (unique per role); only
-  // the most recent is consulted for a permission decision.
-  const { data: assignment, error } = await supabase
+  // A user may hold several assignments in one Sphere (unique per role).
+  // Mirror public.has_permission(): ANY assignment granting the permission
+  // passes — the SQL layer checks all of a user's assignments, so the server
+  // action must too (never just the most recent row).
+  const { data: assignments, error } = await supabase
     .from("role_assignments")
     .select("role, scope")
     .eq("user_id", member.userId)
     .eq("sphere_id", member.sphereId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle()
 
-  if (error || !assignment) return { ok: false, error: "You don't have permission to do that." }
+  if (error || !assignments || assignments.length === 0) {
+    return { ok: false, error: "You don't have permission to do that." }
+  }
 
   // sphere_admin role assignment = full administrative access in the Sphere.
-  if (assignment.role === "sphere_admin") return { ok: true, member }
+  if (assignments.some((a) => a.role === "sphere_admin")) return { ok: true, member }
 
-  const perms: string[] = Array.isArray(assignment.scope?.permissions)
-    ? (assignment.scope.permissions as string[])
-    : []
-  if (!perms.includes(permission)) return { ok: false, error: "You don't have permission to do that." }
+  const holders = assignments.filter((a) =>
+    Array.isArray(a.scope?.permissions) && (a.scope.permissions as string[]).includes(permission),
+  )
+  if (holders.length === 0) return { ok: false, error: "You don't have permission to do that." }
 
   if (scope) {
-    const s = assignment.scope ?? {}
-    if (scope.degree && s.degree !== scope.degree) return { ok: false, error: "This is outside your assigned scope." }
-    if (scope.year && s.year !== scope.year) return { ok: false, error: "This is outside your assigned scope." }
-    if (scope.branch && s.branch !== scope.branch) return { ok: false, error: "This is outside your assigned scope." }
+    const covered = holders.some((a) => {
+      const s = a.scope ?? {}
+      return !(scope.degree && s.degree !== scope.degree) &&
+        !(scope.year && s.year !== scope.year) &&
+        !(scope.branch && s.branch !== scope.branch)
+    })
+    if (!covered) return { ok: false, error: "This is outside your assigned scope." }
   }
 
   return { ok: true, member }

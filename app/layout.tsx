@@ -2,6 +2,7 @@ import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Fraunces, Geist } from 'next/font/google'
 import { Toaster } from '@/components/ui/sonner'
+import { ActivityTracker } from '@/components/activity-tracker'
 import { getMetadataBase } from '@/lib/site-url'
 import { ThemeProvider } from './theme-provider'
 import './globals.css'
@@ -79,6 +80,9 @@ export default function RootLayout({
           {children}
           <Toaster />
         </ThemeProvider>
+        {/* Keeps profiles.last_activity_at fresh (throttled) for the 48-hour
+            inactivity logout. Renders nothing and no-ops for signed-out users. */}
+        <ActivityTracker />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

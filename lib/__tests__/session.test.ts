@@ -20,13 +20,16 @@ import { requireAdmin, requireMember } from "@/lib/data/session"
 
 type MockMembership = { sphere_id: string; anonymous_handle: string; avatar_url: string | null }
 
+type MockProfile = { role: string; account_status: string; last_activity_at?: string | null }
+
 function mockSessionClient(opts: {
   user?: { id: string; email: string } | null
-  profile?: { role: string; account_status: string } | null
+  profile?: MockProfile | null
   membership?: MockMembership | null
 }) {
   const user = opts.user === undefined ? { id: "u1", email: "admin@uresphere.app" } : opts.user
   const getUser = vi.fn().mockResolvedValue({ data: { user }, error: null })
+  const signOut = vi.fn().mockResolvedValue({ error: null })
   const from = vi.fn((table: string) => ({
     select: vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({
@@ -37,7 +40,8 @@ function mockSessionClient(opts: {
       }),
     }),
   }))
-  vi.mocked(createClient).mockReturnValue({ auth: { getUser }, from } as never)
+  vi.mocked(createClient).mockReturnValue({ auth: { getUser, signOut }, from } as never)
+  return { signOut }
 }
 
 beforeEach(() => {
@@ -77,6 +81,38 @@ describe("requireMember", () => {
     expect(member.sphereId).toBe("s1")
     expect(member.anonymousHandle).toBe("@SilentWolf482")
     expect(redirectMock).not.toHaveBeenCalled()
+  })
+
+  it("allows a member whose last activity was under 48 hours ago", async () => {
+    const recent = new Date(Date.now() - 47 * 60 * 60 * 1000).toISOString()
+    mockSessionClient({
+      profile: { role: "user", account_status: "active", last_activity_at: recent },
+      membership: { sphere_id: "s1", anonymous_handle: "@Active1", avatar_url: null },
+    })
+    const member = await requireMember()
+    expect(member.role).toBe("user")
+    expect(redirectMock).not.toHaveBeenCalled()
+  })
+
+  it("allows a member with no recorded activity yet (never signed out on first check)", async () => {
+    mockSessionClient({
+      profile: { role: "user", account_status: "active", last_activity_at: null },
+      membership: { sphere_id: "s1", anonymous_handle: "@Fresh1", avatar_url: null },
+    })
+    const member = await requireMember()
+    expect(member.role).toBe("user")
+    expect(redirectMock).not.toHaveBeenCalled()
+  })
+
+  it("signs out + redirects to login when inactive for 48+ hours", async () => {
+    const stale = new Date(Date.now() - 49 * 60 * 60 * 1000).toISOString()
+    const { signOut } = mockSessionClient({
+      profile: { role: "user", account_status: "active", last_activity_at: stale },
+      membership: { sphere_id: "s1", anonymous_handle: "@Gone1", avatar_url: null },
+    })
+    await expect(requireMember()).rejects.toThrow(/NEXT_REDIRECT/)
+    expect(signOut).toHaveBeenCalledTimes(1)
+    expect(redirectMock).toHaveBeenCalledWith("/auth/login")
   })
 
   it("sends suspended accounts to /auth/suspended — even super admins", async () => {

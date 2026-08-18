@@ -1,23 +1,16 @@
 "use client"
 
-import { useRef, useState, useTransition } from "react"
+import { useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { sendSignupOtpAction, signUpAction, verifySignupOtpAction } from "@/lib/auth/actions"
+import { signUpAction } from "@/lib/auth/actions"
 import { normalizeIndianPhone } from "@/lib/validation"
 import { CollegeSearch } from "@/components/auth/college-search"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { UreSphereLogo } from "@/components/brand/uresphere-logo"
-import {
-  AlertCircle,
-  ArrowLeft,
-  ArrowRight,
-  BadgeCheck,
-  Loader2,
-  ShieldCheck,
-} from "lucide-react"
+import { ArrowLeft, ArrowRight, Loader2, ShieldCheck } from "lucide-react"
 
 const STEPS = ["identity", "campus", "credentials"] as const
 type Step = (typeof STEPS)[number]
@@ -40,13 +33,6 @@ export default function SignUpPage() {
   const [stepIndex, setStepIndex] = useState(0)
   const [isPending, startTransition] = useTransition()
   const [errors, setErrors] = useState<FieldErrors>(EMPTY_ERRORS)
-  const [otpError, setOtpError] = useState<string | null>(null)
-  const [otpSent, setOtpSent] = useState(false)
-  const [otpVerified, setOtpVerified] = useState(false)
-  const [otpToken, setOtpToken] = useState("")
-  const [otpBusy, setOtpBusy] = useState(false)
-  const otpCooldownRef = useRef<number>(0)
-  const [cooldown, setCooldown] = useState(0)
   const [values, setValues] = useState({
     realName: "",
     phone: "",
@@ -68,15 +54,13 @@ export default function SignUpPage() {
     setErrors((e) => ({ ...e, [field]: undefined }))
   }
 
-  /** Field-specific validation — runs on Continue/Submit only. */
+  /** Field-specific validation — runs on Continue/Submit only, never on load. */
   function validateStep(): FieldErrors {
     const errs: FieldErrors = {}
     if (step === "identity") {
       if (values.realName.trim().length < 2) errs.realName = "Please enter your full legal name."
       if (values.phone.trim().length < 7 || !normalizeIndianPhone(values.phone)) {
         errs.phone = "Enter a valid 10-digit Indian phone number."
-      } else if (!otpVerified) {
-        errs.phone = "Verify your phone number with the code we sent before continuing."
       }
     }
     if (step === "campus") {
@@ -104,52 +88,6 @@ export default function SignUpPage() {
     setStepIndex((i) => Math.max(i - 1, 0))
   }
 
-  async function handleSendOtp() {
-    const phone = values.phone.trim()
-    if (!normalizeIndianPhone(phone)) {
-      setErrors((e) => ({ ...e, phone: "Enter a valid 10-digit Indian phone number." }))
-      return
-    }
-    setOtpError(null)
-    setOtpBusy(true)
-    try {
-      const result = await sendSignupOtpAction(phone)
-      if (result.error) {
-        setOtpError(result.error)
-        return
-      }
-      setOtpSent(true)
-      setCooldown(60)
-      otpCooldownRef.current = window.setInterval(() => {
-        setCooldown((c) => {
-          if (c <= 1) {
-            window.clearInterval(otpCooldownRef.current)
-            return 0
-          }
-          return c - 1
-        })
-      }, 1000)
-    } finally {
-      setOtpBusy(false)
-    }
-  }
-
-  async function handleVerifyOtp() {
-    setOtpError(null)
-    setOtpBusy(true)
-    try {
-      const result = await verifySignupOtpAction(values.phone, otpToken)
-      if (result.error) {
-        setOtpError(result.error)
-        return
-      }
-      setOtpVerified(true)
-      setOtpError(null)
-    } finally {
-      setOtpBusy(false)
-    }
-  }
-
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const errs = validateStep()
@@ -166,7 +104,6 @@ export default function SignUpPage() {
     formData.set("email", values.email)
     formData.set("password", values.password)
     formData.set("confirmPassword", values.confirmPassword)
-    formData.set("phoneVerified", otpVerified ? "true" : "false")
 
     startTransition(async () => {
       const result = await signUpAction(formData)
@@ -181,6 +118,8 @@ export default function SignUpPage() {
         return
       }
       if (result.needsEmailConfirmation) {
+        // Email confirmation is enabled: the account is created but not yet
+        // active — the user must click the confirmation link in their inbox.
         router.push("/auth/sign-up-success")
       } else {
         // Email confirmation is disabled on this project: the account is
@@ -252,7 +191,6 @@ export default function SignUpPage() {
                   placeholder="98765 43210"
                   value={values.phone}
                   onChange={(e) => update("phone", e.target.value)}
-                  disabled={otpVerified}
                   aria-invalid={Boolean(errors.phone)}
                   aria-describedby={errors.phone ? "phone-error" : undefined}
                 />
@@ -261,51 +199,9 @@ export default function SignUpPage() {
                     {errors.phone}
                   </p>
                 )}
-                {otpVerified ? (
-                  <p className="flex items-center gap-1.5 text-xs font-medium text-primary">
-                    <BadgeCheck className="size-3.5" />
-                    Phone verified — one verified number per account.
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={handleSendOtp}
-                      disabled={otpBusy || cooldown > 0 || values.phone.trim().length < 10}
-                      className="gap-1.5"
-                    >
-                      {otpBusy ? <Loader2 className="size-3.5 animate-spin" /> : null}
-                      {otpSent ? (cooldown > 0 ? `Resend code in ${cooldown}s` : "Resend code") : "Send verification code"}
-                    </Button>
-                    {otpSent && (
-                      <div className="flex items-center gap-2">
-                        <Input
-                          value={otpToken}
-                          onChange={(e) => setOtpToken(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                          placeholder="6-digit code"
-                          inputMode="numeric"
-                          maxLength={6}
-                          className="w-32"
-                          aria-label="Verification code"
-                        />
-                        <Button type="button" size="sm" onClick={handleVerifyOtp} disabled={otpBusy || otpToken.length !== 6}>
-                          {otpBusy ? <Loader2 className="size-3.5 animate-spin" /> : "Verify"}
-                        </Button>
-                      </div>
-                    )}
-                    {otpError && (
-                      <p role="alert" className="flex items-center gap-1.5 text-xs text-destructive">
-                        <AlertCircle className="size-3.5 shrink-0" />
-                        {otpError}
-                      </p>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      We&apos;ll text a one-time code to confirm the number is really yours.
-                    </p>
-                  </div>
-                )}
+                <p className="text-xs text-muted-foreground">
+                  Stored privately in your profile so your campus can reach you — never shown to other members.
+                </p>
               </div>
             </fieldset>
           )}
@@ -443,7 +339,7 @@ export default function SignUpPage() {
 
         <p className="mt-8 flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
           <ShieldCheck className="size-3.5" />
-          One verified phone number = one account. We never sell or share your data.
+          Your details stay private. We never sell or share your data.
         </p>
 
         <p className="mt-4 text-center text-sm text-muted-foreground">

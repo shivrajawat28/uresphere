@@ -15,7 +15,7 @@ vi.mock("next/navigation", () => ({
 }))
 
 import { createClient } from "@/lib/supabase/server"
-import { loginAction, signUpAction } from "@/lib/auth/actions"
+import { loginAction, resetPasswordAction, signUpAction } from "@/lib/auth/actions"
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -162,15 +162,11 @@ describe("loginAction", () => {
     expect(redirectMock).not.toHaveBeenCalled()
   })
 
-  it("resolves a phone number to the registered email and signs in", async () => {
-    const { signInWithPassword } = makeLoginClient({
-      phoneProfile: { email: "bob@example.com" },
-      roleProfile: { role: "user" },
-    })
+  it("rejects a phone number — login is email-based (phone is profile info only)", async () => {
+    const { signInWithPassword } = makeLoginClient({ phoneProfile: null, roleProfile: null })
     const result = await loginAction(loginFormData("9876543210"))
-    expect(result.error).toBeNull()
-    expect(signInWithPassword).toHaveBeenCalledWith({ email: "bob@example.com", password: "hunter2hunter" })
-    expect(redirectMock).not.toHaveBeenCalled()
+    expect(result.error).toMatch(/couldn't find an account/i)
+    expect(signInWithPassword).not.toHaveBeenCalled()
   })
 
   it("redirects a super_admin to /admin after a successful login", async () => {
@@ -186,5 +182,60 @@ describe("loginAction", () => {
     const result = await loginAction(loginFormData("0000000000"))
     expect(result.error).toMatch(/couldn't find an account/i)
     expect(signInWithPassword).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// resetPasswordAction — Supabase-native recovery session, no custom tokens
+// ---------------------------------------------------------------------------
+
+function makeResetClient(opts: { user: { id: string } | null; updateError?: { message: string } | null }) {
+  const getUser = vi.fn().mockResolvedValue({ data: { user: opts.user }, error: null })
+  const updateUser = vi.fn().mockResolvedValue({ data: { user: opts.user }, error: opts.updateError ?? null })
+  vi.mocked(createClient).mockReturnValue({ auth: { getUser, updateUser } } as never)
+  return { getUser, updateUser }
+}
+
+function resetFormData(password: string, confirmPassword: string): FormData {
+  const fd = new FormData()
+  fd.set("password", password)
+  fd.set("confirmPassword", confirmPassword)
+  return fd
+}
+
+describe("resetPasswordAction", () => {
+  it("rejects a short new password before touching auth", async () => {
+    const { updateUser } = makeResetClient({ user: { id: "u1" } })
+    const result = await resetPasswordAction(resetFormData("short", "short"))
+    expect(result.error).toMatch(/8 characters/i)
+    expect(updateUser).not.toHaveBeenCalled()
+  })
+
+  it("rejects mismatched confirmation", async () => {
+    const { updateUser } = makeResetClient({ user: { id: "u1" } })
+    const result = await resetPasswordAction(resetFormData("hunter2hunter", "different!"))
+    expect(result.error).toMatch(/don't match/i)
+    expect(updateUser).not.toHaveBeenCalled()
+  })
+
+  it("rejects a reset without a valid recovery session (invalid/expired link)", async () => {
+    const { updateUser } = makeResetClient({ user: null })
+    const result = await resetPasswordAction(resetFormData("hunter2hunter", "hunter2hunter"))
+    expect(result.error).toMatch(/invalid or has expired/i)
+    expect(updateUser).not.toHaveBeenCalled()
+  })
+
+  it("updates the password when a valid recovery session exists", async () => {
+    const { updateUser } = makeResetClient({ user: { id: "u1" } })
+    const result = await resetPasswordAction(resetFormData("hunter2hunter", "hunter2hunter"))
+    expect(result.error).toBeNull()
+    expect(updateUser).toHaveBeenCalledWith({ password: "hunter2hunter" })
+  })
+
+  it("maps a session-related update failure to the invalid-link message", async () => {
+    const { updateUser } = makeResetClient({ user: { id: "u1" }, updateError: { message: "Auth session missing" } })
+    const result = await resetPasswordAction(resetFormData("hunter2hunter", "hunter2hunter"))
+    expect(result.error).toMatch(/invalid or has expired/i)
+    expect(updateUser).toHaveBeenCalledTimes(1)
   })
 })

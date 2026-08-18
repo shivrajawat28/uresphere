@@ -146,13 +146,17 @@ function makeClient({
   const del = vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) })
   const auditInsert = vi.fn().mockResolvedValue({ error: null })
 
-  const raMaybeSingle = vi.fn().mockResolvedValue({ data: assignment, error: null })
-  const raEq2 = vi.fn((col: string, val: string) => {
-    if (col === "sphere_id" && val !== assignmentSphere) {
-      raMaybeSingle.mockResolvedValue({ data: null, error: null })
-    }
-    return { maybeSingle: raMaybeSingle }
-  })
+  const raEq2 = vi.fn((col: string, val: string) => ({
+    then: (resolve: (v: unknown) => unknown) =>
+      resolve({
+        data: col === "sphere_id" && val !== assignmentSphere
+          ? []
+          : assignment
+            ? [assignment]
+            : [],
+        error: null,
+      }),
+  }))
 
   const from = vi.fn((table: string) => {
     if (table === "events") {

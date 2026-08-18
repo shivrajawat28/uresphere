@@ -1,6 +1,7 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { useState, useTransition } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   createSubjectAction,
   createUnitAction,
@@ -42,6 +43,7 @@ import {
   ChevronRight,
   GraduationCap,
   Layers,
+  ArrowLeft,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -96,79 +98,80 @@ export function AcademicClient({
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
 
-  // --- Drill-down state ---
-  const [degree, setDegree] = useState<string>("")
-  const [year, setYear] = useState<string>("")
-  const [branch, setBranch] = useState<string>("")
-  const [subjectId, setSubjectId] = useState<string>("")
-  const [unitId, setUnitId] = useState<string>("")
+  // --- Drill-down state lives in the URL (query params) so browser Back,
+  // in-app Back, refresh, and direct links all preserve the degree/year/
+  // branch/subject context. Navigation pushes a new history entry per level,
+  // so Back walks one level at a time instead of resetting to the Academic
+  // homepage.
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const degree = searchParams.get("degree") ?? ""
+  const year = searchParams.get("year") ?? ""
+  const branch = searchParams.get("branch") ?? ""
+  const subjectId = searchParams.get("subject") ?? ""
+  const unitId = searchParams.get("unit") ?? ""
 
-  const degrees = useMemo(() => Array.from(new Set(subjects.map((s) => s.degree).filter(Boolean))), [subjects])
-  const yearsForDegree = useMemo(
-    () => Array.from(new Set(subjects.filter((s) => s.degree === degree).map((s) => s.year).filter(Boolean))),
-    [subjects, degree],
-  )
-  const branchesForYear = useMemo(
-    () =>
-      Array.from(
-        new Set(subjects.filter((s) => s.degree === degree && s.year === year).map((s) => s.branch).filter(Boolean)),
-      ),
-    [subjects, degree, year],
-  )
-  const subjectsForBranch = useMemo(
-    () => subjects.filter((s) => s.degree === degree && s.year === year && s.branch === branch),
-    [subjects, degree, year, branch],
-  )
-  const selectedSubject = subjectsForBranch.find((s) => s.id === subjectId)
-  const unitsForSubject = useMemo(() => units.filter((u) => u.subject_id === subjectId), [units, subjectId])
-
-  function resetDrill() {
-    setDegree("")
-    setYear("")
-    setBranch("")
-    setSubjectId("")
-    setUnitId("")
+  /** Pushes a new drill-down level, preserving the deeper-lesser context. */
+  function go(next: { degree?: string; year?: string; branch?: string; subject?: string; unit?: string }) {
+    const qs = new URLSearchParams()
+    if (next.degree) qs.set("degree", next.degree)
+    if (next.year) qs.set("year", next.year)
+    if (next.branch) qs.set("branch", next.branch)
+    if (next.subject) qs.set("subject", next.subject)
+    if (next.unit) qs.set("unit", next.unit)
+    const queryString = qs.toString()
+    router.push(queryString ? `${pathname}?${queryString}` : pathname)
   }
 
   function pickDegree(d: string) {
-    setDegree(d)
-    setYear("")
-    setBranch("")
-    setSubjectId("")
-    setUnitId("")
+    go({ degree: d })
   }
   function pickYear(y: string) {
-    setYear(y)
-    setBranch("")
-    setSubjectId("")
-    setUnitId("")
+    go({ degree, year: y })
   }
   function pickBranch(b: string) {
-    setBranch(b)
-    setSubjectId("")
-    setUnitId("")
+    go({ degree, year, branch: b })
   }
   function pickSubject(id: string) {
-    setSubjectId(id)
-    setUnitId("")
+    go({ degree, year, branch, subject: id })
   }
 
-  const visibleResources = useMemo(() => {
-    return resources.filter((r) => {
-      if (subjectId) {
-        if (r.subject_id !== subjectId) return false
-        if (unitId && r.unit_id !== unitId) return false
-      }
-      const q = query.trim().toLowerCase()
-      const matchesQuery =
-        q.length === 0 || r.title.toLowerCase().includes(q) || r.subjectName.toLowerCase().includes(q)
-      const matchesType = typeFilter === "all" || r.type === typeFilter
-      return matchesQuery && matchesType
-    })
-  }, [resources, query, typeFilter, subjectId, unitId])
+  /** In-app Back: pop the deepest level, keeping the outer context intact. */
+  function back() {
+    if (unitId) go({ degree, year, branch, subject: subjectId })
+    else if (subjectId) go({ degree, year, branch })
+    else if (branch) go({ degree, year })
+    else if (year) go({ degree })
+    else router.back()
+  }
+
+  // These derive from the URL search params (source of truth for the drill-
+  // down); the React Compiler memoizes them automatically.
+  const degrees = Array.from(new Set(subjects.map((s) => s.degree).filter(Boolean)))
+  const yearsForDegree = Array.from(
+    new Set(subjects.filter((s) => s.degree === degree).map((s) => s.year).filter(Boolean)),
+  )
+  const branchesForYear = Array.from(
+    new Set(subjects.filter((s) => s.degree === degree && s.year === year).map((s) => s.branch).filter(Boolean)),
+  )
+  const subjectsForBranch = subjects.filter((s) => s.degree === degree && s.year === year && s.branch === branch)
+  const selectedSubject = subjectsForBranch.find((s) => s.id === subjectId)
+  const unitsForSubject = units.filter((u) => u.subject_id === subjectId)
+
+  const visibleResources = resources.filter((r) => {
+    if (subjectId) {
+      if (r.subject_id !== subjectId) return false
+      if (unitId && r.unit_id !== unitId) return false
+    }
+    const q = query.trim().toLowerCase()
+    const matchesQuery = q.length === 0 || r.title.toLowerCase().includes(q) || r.subjectName.toLowerCase().includes(q)
+    const matchesType = typeFilter === "all" || r.type === typeFilter
+    return matchesQuery && matchesType
+  })
 
   const crumb = [
-    { label: degree || "All degrees", action: () => resetDrill() },
+    { label: degree || "All degrees", action: () => go({}) },
     ...(year ? [{ label: year, action: () => pickDegree(degree) }] : []),
     ...(branch ? [{ label: branch, action: () => pickYear(year) }] : []),
     ...(selectedSubject ? [{ label: selectedSubject.name, action: () => pickBranch(branch) }] : []),
@@ -218,21 +221,27 @@ export function AcademicClient({
         </div>
       )}
 
-      {/* Breadcrumb */}
-      {crumb.length > 0 && (
-        <nav aria-label="Breadcrumb" className="mb-6 flex flex-wrap items-center gap-1 text-sm">
-          {crumb.map((c, i) => (
-            <span key={c.label} className="flex items-center gap-1">
-              {i > 0 && <ChevronRight className="size-3.5 text-muted-foreground/50" />}
-              <button
-                onClick={c.action}
-                className={`transition hover:text-primary ${i === crumb.length - 1 ? "font-medium text-foreground" : "text-muted-foreground"}`}
-              >
-                {c.label}
-              </button>
-            </span>
-          ))}
-        </nav>
+      {/* Back + Breadcrumb */}
+      {(degree || year || branch || subjectId) && (
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={back} className="gap-1.5 -ml-2 text-muted-foreground">
+            <ArrowLeft className="size-4" />
+            Back
+          </Button>
+          <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1 text-sm">
+            {crumb.map((c, i) => (
+              <span key={c.label} className="flex items-center gap-1">
+                {i > 0 && <ChevronRight className="size-3.5 text-muted-foreground/50" />}
+                <button
+                  onClick={c.action}
+                  className={`transition hover:text-primary ${i === crumb.length - 1 ? "font-medium text-foreground" : "text-muted-foreground"}`}
+                >
+                  {c.label}
+                </button>
+              </span>
+            ))}
+          </nav>
+        </div>
       )}
 
       {/* Level 1: Degrees */}
@@ -383,7 +392,7 @@ export function AcademicClient({
           {unitsForSubject.length > 0 && (
             <div className="mb-5 flex flex-wrap gap-2">
               <button
-                onClick={() => setUnitId("")}
+                onClick={() => go({ degree, year, branch, subject: subjectId })}
                 className={`rounded-full border px-3 py-1 text-xs transition ${
                   !unitId ? "border-primary bg-primary/10 text-primary" : "border-border/70 text-muted-foreground hover:text-foreground"
                 }`}
@@ -393,7 +402,7 @@ export function AcademicClient({
               {unitsForSubject.map((u) => (
                 <button
                   key={u.id}
-                  onClick={() => setUnitId(unitId === u.id ? "" : u.id)}
+                  onClick={() => go({ degree, year, branch, subject: subjectId, unit: unitId === u.id ? "" : u.id })}
                   className={`rounded-full border px-3 py-1 text-xs transition ${
                     unitId === u.id ? "border-primary bg-primary/10 text-primary" : "border-border/70 text-muted-foreground hover:text-foreground"
                   }`}
@@ -413,7 +422,10 @@ export function AcademicClient({
               {visibleResources.map((r) => (
                 <Card key={r.id} className="border-border/70 bg-card">
                   <CardContent className="flex items-center justify-between gap-3 p-4">
-                    <a href={r.url} target="_blank" rel="noopener noreferrer" className="flex min-w-0 items-center gap-3">
+                    {/* Opens in the same tab so browser Back returns to this
+                        exact degree → year → subject context instead of the
+                        Academic homepage. */}
+                    <a href={r.url} rel="noopener noreferrer" className="flex min-w-0 items-center gap-3">
                       <FileText className="size-5 shrink-0 text-primary" />
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-foreground hover:underline">{r.title}</p>

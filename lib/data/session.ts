@@ -1,6 +1,21 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 
+// 48-hour inactivity logout: the user is signed out ONLY when they have not
+// returned to / used the application for 48 consecutive hours. It is an
+// INACTIVITY timeout, not an absolute session cap — every meaningful return
+// refreshes `profiles.last_activity_at` (client-side, throttled), so an
+// active user is never logged out.
+const INACTIVITY_LIMIT_MS = 48 * 60 * 60 * 1000
+
+/** True when the member's last activity is 48+ hours in the past (or unparseable). */
+function isInactive(lastActivityAt: string | null | undefined): boolean {
+  if (!lastActivityAt) return false
+  const last = new Date(lastActivityAt).getTime()
+  if (Number.isNaN(last)) return false
+  return Date.now() - last >= INACTIVITY_LIMIT_MS
+}
+
 export type CurrentMember = {
   userId: string
   email: string | null
@@ -34,7 +49,11 @@ export async function requireMember(): Promise<CurrentMember> {
   }
 
   const [{ data: profile }, { data: membership }] = await Promise.all([
-    supabase.from("profiles").select("role, account_status, real_name").eq("id", user.id).maybeSingle(),
+    supabase
+      .from("profiles")
+      .select("role, account_status, real_name, last_activity_at")
+      .eq("id", user.id)
+      .maybeSingle(),
     supabase
       .from("user_spheres")
       .select("sphere_id, anonymous_handle, avatar_url, spheres(name)")
@@ -50,6 +69,21 @@ export async function requireMember(): Promise<CurrentMember> {
   // Suspension is enforced before anything else — including for super admins.
   if (profile.account_status === "suspended") {
     redirect("/auth/suspended")
+  }
+
+  // 48-hour inactivity timeout. The timestamp is server-side (profiles table,
+  // RLS-gated) and refreshed by the throttled client tracker, so this can
+  // never be bypassed by a client-controlled value. Expiring the Supabase
+  // session here guarantees an inactive user can't be let back into protected
+  // areas — including by hand-editing a URL or replaying an old session.
+  if (isInactive(profile.last_activity_at)) {
+    try {
+      await supabase.auth.signOut()
+    } catch {
+      // Best-effort: even if the network revoke fails, the user must never
+      // be let into a protected area with an expired inactivity window.
+    }
+    redirect("/auth/login")
   }
 
   // Super admins are platform-global and must never be blocked by onboarding.

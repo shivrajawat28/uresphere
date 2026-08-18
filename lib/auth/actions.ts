@@ -3,10 +3,13 @@
 import { createClient } from "@/lib/supabase/server"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
-import { mapAuthError, normalizeEmail, normalizeIndianPhone, validateLogin, validateSignup } from "@/lib/validation"
+import { isValidEmail, mapAuthError, normalizeEmail, normalizeIndianPhone, validateLogin, validateSignup } from "@/lib/validation"
 
 async function getRedirectUrl() {
-  if (process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL) {
+  // The dev override exists so a tunneled/local Supabase project can receive
+  // auth redirects during development. Never use it in production — a stray
+  // env var must not send production auth flows to localhost.
+  if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL) {
     return process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL
   }
   const h = await headers()
@@ -16,87 +19,6 @@ async function getRedirectUrl() {
 
 export type ActionResult = { error: string | null }
 export type SignUpResult = { error: string | null; needsEmailConfirmation: boolean }
-
-// ---------------------------------------------------------------------------
-// Phone helpers (Parts 16–17)
-// ---------------------------------------------------------------------------
-
-/**
- * In-memory OTP rate limiter (per process). Supabase additionally enforces a
- * per-number cooldown (default 60s) and token expiry server-side; this is a
- * cheap first line so a single user can't hammer the SMS provider.
- */
-const otpSentAt = new Map<string, number>()
-const OTP_COOLDOWN_MS = 60_000
-
-function phoneKey(phone: string): string {
-  return phone.replace(/\D/g, "")
-}
-
-/**
- * Sends a signup OTP to an (as yet unregistered) phone number. The account is
- * created only AFTER the OTP is verified and the rest of the form is valid.
- * Requires Supabase phone auth + an SMS provider (see the manual settings
- * report). Errors are surfaced as-is — never logged.
- */
-export async function sendSignupOtpAction(rawPhone: string): Promise<{ error: string | null }> {
-  const phone = normalizeIndianPhone(rawPhone)
-  if (!phone) return { error: "Enter a valid 10-digit Indian phone number." }
-
-  const supabase = await createClient()
-  const key = phoneKey(phone)
-
-  // Duplicate-phone check (defense in depth behind the DB unique index).
-  const { data: existing } = await supabase.from("profiles").select("id").eq("phone", phone).maybeSingle()
-  if (existing) return { error: "This phone number is already linked to an account. Try signing in." }
-
-  const last = otpSentAt.get(key)
-  if (last && Date.now() - last < OTP_COOLDOWN_MS) {
-    const wait = Math.ceil((OTP_COOLDOWN_MS - (Date.now() - last)) / 1000)
-    return { error: `Please wait ${wait}s before requesting another code.` }
-  }
-
-  // Never create a phone-only account at OTP-send time: the account is only
-  // created after the OTP is verified AND the rest of the signup form is
-  // valid. shouldCreateUser:false sends the code without registering the
-  // number (GoTrue would otherwise auto-create a user for unregistered
-  // phones, racing our email+password signup and tripping the one-phone
-  // uniqueness guarantee).
-  const { error } = await supabase.auth.signInWithOtp({ phone, options: { shouldCreateUser: false } })
-  if (error) {
-    // Never log OTPs. Surface a friendly version of provider errors.
-    const msg = error.message.toLowerCase()
-    if (msg.includes("sms") || msg.includes("otp") || msg.includes("provider") || msg.includes("enabled")) {
-      return { error: "SMS verification isn't configured for this app yet. Contact support." }
-    }
-    return { error: mapAuthError(error.message) }
-  }
-
-  otpSentAt.set(key, Date.now())
-  return { error: null }
-}
-
-/**
- * Verifies the OTP for a phone number. Success means the number is real and
- * owned by the person filling the form; the final signup records it.
- */
-export async function verifySignupOtpAction(rawPhone: string, token: string): Promise<{ error: string | null }> {
-  const phone = normalizeIndianPhone(rawPhone)
-  if (!phone) return { error: "Enter a valid 10-digit Indian phone number." }
-  const cleanToken = token.trim()
-  if (!/^\d{6}$/.test(cleanToken)) return { error: "Enter the 6-digit code you received." }
-
-  const supabase = await createClient()
-  const { error } = await supabase.auth.verifyOtp({ phone, token: cleanToken, type: "sms" })
-  if (error) {
-    const msg = error.message.toLowerCase()
-    if (msg.includes("expired")) return { error: "This code expired. Request a new one." }
-    if (msg.includes("invalid") || msg.includes("token")) return { error: "That code isn't right. Check it and try again." }
-    if (msg.includes("rate")) return { error: "Too many attempts. Please wait and try again." }
-    return { error: mapAuthError(error.message) }
-  }
-  return { error: null }
-}
 
 export async function signUpAction(formData: FormData): Promise<SignUpResult> {
   const realName = String(formData.get("realName") || "").trim()
@@ -118,11 +40,11 @@ export async function signUpAction(formData: FormData): Promise<SignUpResult> {
   })
   if (validationError) return { error: validationError, needsEmailConfirmation: false }
 
-  // Phone must be a real Indian number, and — with phone verification enabled
-  // on the project — it must have been OTP-verified during the signup flow.
+  // Phone is profile information only — no SMS/OTP verification is required.
+  // It is stored in the profile so admins can reach the member, and the
+  // partial unique index still enforces one phone = one account.
   const normalizedPhone = normalizeIndianPhone(phone)
   if (!normalizedPhone) return { error: "Enter a valid 10-digit Indian phone number.", needsEmailConfirmation: false }
-  const phoneVerified = String(formData.get("phoneVerified") || "") === "true"
 
   const supabase = await createClient()
   const emailRedirectTo = await getRedirectUrl()
@@ -148,7 +70,7 @@ export async function signUpAction(formData: FormData): Promise<SignUpResult> {
     return { error: "Pick your current year.", needsEmailConfirmation: false }
   }
 
-  // ONE VERIFIED PHONE = ONE ACCOUNT. The DB has a partial unique index on
+  // ONE PHONE = ONE ACCOUNT. The DB has a partial unique index on
   // profiles.phone; this server-side check gives a friendly error first and
   // the index is the hard backstop against races.
   const { data: existingPhone } = await supabase.from("profiles").select("id").eq("phone", normalizedPhone).maybeSingle()
@@ -164,7 +86,6 @@ export async function signUpAction(formData: FormData): Promise<SignUpResult> {
       data: {
         real_name: realName,
         phone: normalizedPhone,
-        phone_verified: phoneVerified,
         college_input: collegeInput,
         college_id: resolvedCollegeId,
         college_year: collegeYear,
@@ -193,18 +114,11 @@ export async function loginAction(formData: FormData): Promise<ActionResult> {
 
   const supabase = await createClient()
 
-  // Users may sign in with email OR phone. If the identifier isn't an email,
-  // resolve it to the registered email via the private profile table.
-  let email = identifier.includes("@") ? normalizeEmail(identifier) : null
-  if (!email) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("email")
-      .eq("phone", identifier)
-      .maybeSingle()
-    email = profile?.email || null
-  }
-  if (!email) return { error: "We couldn't find an account with those details." }
+  // Login is email-based. (Phone is profile information only — see the signup
+  // flow — and a phone→email lookup here would require exposing private
+  // profile data to unauthenticated requests, so it is deliberately not done.)
+  const email = normalizeEmail(identifier)
+  if (!email || !isValidEmail(email)) return { error: "We couldn't find an account with those details." }
 
   const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password })
 
@@ -238,8 +152,14 @@ export async function logoutAction(): Promise<void> {
 export async function forgotPasswordAction(formData: FormData): Promise<ActionResult> {
   const email = String(formData.get("email") || "").trim()
   if (!email) return { error: "Please enter your email address." }
+  if (!isValidEmail(email)) return { error: "Please enter a valid email address." }
 
   const supabase = await createClient()
+
+  // Supabase's native email reset flow. The recovery link points at the auth
+  // callback (exchanging the PKCE code server-side) and then lands on
+  // /auth/reset-password. redirectTo must be present in the project's
+  // "Allowed Redirect URLs" (see the manual settings report).
   const redirectTo = `${await getRedirectUrl()}?next=/auth/reset-password`
   const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
 
@@ -247,17 +167,38 @@ export async function forgotPasswordAction(formData: FormData): Promise<ActionRe
     return { error: mapAuthError(error.message) }
   }
 
+  // Unknown emails also return success here (Supabase deliberately does not
+  // reveal whether an account exists) — the page shows the neutral
+  // "if an account exists…" message either way.
   return { error: null }
 }
 
 export async function resetPasswordAction(formData: FormData): Promise<ActionResult> {
   const password = String(formData.get("password") || "")
-  if (!password || password.length < 8) return { error: "Password must be at least 8 characters." }
+  const confirmPassword = String(formData.get("confirmPassword") || "")
+  if (password.length < 8) return { error: "Password must be at least 8 characters." }
+  if (password !== confirmPassword) return { error: "Passwords don't match." }
 
   const supabase = await createClient()
+
+  // A password reset requires a valid Supabase recovery session — the one
+  // issued when the user clicked the emailed reset link (never a custom token
+  // stored in our database). Without it, the link was invalid, expired, or
+  // already used.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return { error: "This password reset link is invalid or has expired. Please request a new one." }
+  }
+
   const { error } = await supabase.auth.updateUser({ password })
 
   if (error) {
+    const msg = error.message.toLowerCase()
+    if (msg.includes("session") || msg.includes("expired") || msg.includes("user")) {
+      return { error: "This password reset link is invalid or has expired. Please request a new one." }
+    }
     return { error: mapAuthError(error.message) }
   }
 

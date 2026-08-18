@@ -180,13 +180,15 @@ function makeClient({
 
   // role_assignments lookup is sphere-scoped: the assignment is only returned
   // when the requested Sphere matches, so cross-Sphere calls are denied.
-  const raMaybeSingle = vi.fn().mockResolvedValue({ data: assignment, error: null })
-  const raEq2 = vi.fn((col: string, val: string) => {
-    if (col === "sphere_id" && val !== assignmentSphere) {
-      raMaybeSingle.mockResolvedValue({ data: null, error: null })
-    }
-    return { maybeSingle: raMaybeSingle }
-  })
+  // requireSphereAction now awaits the query chain directly and expects a row
+  // array (any-assignment semantics) — resolve a thenable instead of maybeSingle.
+  const raEq2 = vi.fn((col: string, val: string) => ({
+    then: (resolve: (v: unknown) => unknown) =>
+      resolve({
+        data: col === "sphere_id" && val !== assignmentSphere ? [] : assignment ? [assignment] : [],
+        error: null,
+      }),
+  }))
 
   const from = vi.fn((table: string) => {
     if (table === "subjects") {
@@ -346,7 +348,7 @@ describe("deleteUnitAction — section derived from the linked subject", () => {
       if (table === "academic_units") return { select: unitSelect, delete: del }
       if (table === "subjects") return { select: subjectSelect }
       if (table === "user_spheres") return { select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) }) }) }) }
-      if (table === "role_assignments") return { select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: { role: "academic_manager", scope: MANAGER_SCOPE }, error: null }) }) }) }) }
+      if (table === "role_assignments") return { select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ then: (resolve: (v: unknown) => unknown) => resolve({ data: [{ role: "academic_manager", scope: MANAGER_SCOPE }], error: null }) }) }) }) }
       if (table === "audit_logs") return { insert: vi.fn().mockResolvedValue({ error: null }) }
       return {}
     })

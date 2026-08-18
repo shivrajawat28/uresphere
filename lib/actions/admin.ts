@@ -64,23 +64,29 @@ export async function requireSphereAction(
     if (membership) return { ok: true, member }
   }
 
-  const { data: assignment } = await supabase
+  // A user may hold several role assignments in one Sphere (unique per role).
+  // Mirror public.has_permission(): ANY assignment granting the permission and
+  // covering the target scope authorizes the action — never just one row. The
+  // previous .maybeSingle() here failed outright for multi-role managers
+  // (PostgREST errors when the query returns >1 row), so a legitimate scoped
+  // manager holding e.g. academic_manager + listing_manager could never upload
+  // academic content — "You don't have access to that Sphere." on every action.
+  const { data: assignments } = await supabase
     .from("role_assignments")
     .select("role, scope")
     .eq("user_id", member.userId)
     .eq("sphere_id", sphereId)
-    .maybeSingle()
-  if (!assignment) return { ok: false, error: "You don't have access to that Sphere." }
+  if (!assignments || assignments.length === 0) return { ok: false, error: "You don't have access to that Sphere." }
 
-  if (assignment.role === "sphere_admin") return { ok: true, member }
+  if (assignments.some((a) => a.role === "sphere_admin")) return { ok: true, member }
   if (!permission) return { ok: false, error: "You don't have permission to do that." }
 
-  const perms: string[] = Array.isArray(assignment.scope?.permissions)
-    ? (assignment.scope.permissions as string[])
-    : []
-  if (!perms.includes(permission)) return { ok: false, error: "You don't have permission to do that." }
+  const holders = assignments.filter((a) =>
+    Array.isArray(a.scope?.permissions) && (a.scope.permissions as string[]).includes(permission),
+  )
+  if (holders.length === 0) return { ok: false, error: "You don't have permission to do that." }
 
-  if (scope && !scopeCovers(assignment.scope as ScopeFilter | undefined, scope)) {
+  if (scope && !holders.some((a) => scopeCovers(a.scope as ScopeFilter | undefined, scope))) {
     return { ok: false, error: "This is outside your assigned scope." }
   }
   return { ok: true, member }

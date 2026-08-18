@@ -19,6 +19,18 @@ export default function ResetPasswordPage() {
     setError(null)
     const formData = new FormData(e.currentTarget)
 
+    // Client-side checks first so mismatches never reach the server.
+    const password = String(formData.get("password") || "")
+    const confirmPassword = String(formData.get("confirmPassword") || "")
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.")
+      return
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords don't match.")
+      return
+    }
+
     startTransition(async () => {
       const result = await resetPasswordAction(formData)
       if (result.error) {
@@ -68,6 +80,16 @@ export default function ResetPasswordPage() {
                   type="password"
                   autoComplete="new-password"
                   placeholder="At least 8 characters"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Confirm new password</Label>
+                <Input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="Re-enter your new password"
                 />
               </div>
 

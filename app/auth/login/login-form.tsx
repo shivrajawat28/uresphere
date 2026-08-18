@@ -52,10 +52,12 @@ export function LoginForm() {
           Sign in to re-enter your campus Sphere.
         </p>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        {/* noValidate: friendly app-level errors (e.g. email-only login) must
+            surface instead of being swallowed by the browser's native checks. */}
+        <form onSubmit={handleSubmit} noValidate className="space-y-5">
           <div className="space-y-2">
-            <Label htmlFor="email">Email or phone</Label>
-            <Input id="email" name="email" autoComplete="username" placeholder="you@example.com or (555) 123-4567" />
+            <Label htmlFor="email">Email</Label>
+            <Input id="email" name="email" type="email" autoComplete="email" placeholder="you@example.com" />
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
