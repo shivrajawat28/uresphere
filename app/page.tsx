@@ -6,10 +6,37 @@ import { Features } from "@/components/landing/features"
 import { Trust } from "@/components/landing/trust"
 import { UpcomingPlans } from "@/components/landing/upcoming-plans"
 import { CtaFooter } from "@/components/landing/cta-footer"
+import { getSiteUrl } from "@/lib/site-url"
 
 export default function Page() {
+  const siteUrl = getSiteUrl()
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    name: "UreSphere",
+    url: siteUrl,
+    applicationCategory: "SocialNetworkingApplication",
+    operatingSystem: "Web",
+    description: "A private, campus-verified community platform. Chat, trade, and organize with people who share your college — anonymously.",
+    offers: {
+      "@type": "Offer",
+      price: "0",
+      priceCurrency: "INR",
+    },
+    publisher: {
+      "@type": "Organization",
+      name: "UreSphere",
+      url: siteUrl,
+    },
+  }
+
   return (
     <main className="min-h-svh bg-background">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <SiteNav />
       <Hero />
       <HowItWorks />

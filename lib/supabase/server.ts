@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
+const ONE_YEAR = 60 * 60 * 24 * 365
+
 /**
  * Especially important if using Fluid compute: Don't put this client in a
  * global variable. Always create a new client within each function when using
@@ -10,7 +12,11 @@ export async function createClient() {
   const cookieStore = await cookies()
 
   return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-    cookieOptions: { secure: process.env.NODE_ENV === "production" },
+    cookieOptions: {
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: ONE_YEAR,
+    },
     cookies: {
       getAll() {
         return cookieStore.getAll()

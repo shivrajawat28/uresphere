@@ -73,7 +73,7 @@ export default async function DashboardPage() {
         .select("id, title, url, status, fee_status, user_id, created_at, reviewed_at, paid_at")
         .eq("sphere_id", member.sphereId)
         .order("created_at", { ascending: false })
-        .limit(50),
+        .limit(10),
       supabase.from("platform_config").select("value").eq("key", "promotion_payment").maybeSingle(),
     ])
 

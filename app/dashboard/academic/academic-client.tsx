@@ -125,15 +125,19 @@ export function AcademicClient({
   }
 
   function pickDegree(d: string) {
+    if (isPending) return
     go({ degree: d })
   }
   function pickYear(y: string) {
+    if (isPending) return
     go({ degree, year: y })
   }
   function pickBranch(b: string) {
+    if (isPending) return
     go({ degree, year, branch: b })
   }
   function pickSubject(id: string) {
+    if (isPending) return
     go({ degree, year, branch, subject: id })
   }
 
@@ -261,7 +265,7 @@ export function AcademicClient({
                 <button
                   key={d}
                   onClick={() => pickDegree(d)}
-                  className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition hover:border-primary/40"
+                  className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition-all duration-150 hover:border-primary/40 active:scale-[0.98] active:bg-primary/5"
                 >
                   <span className="font-serif text-lg text-foreground">{d}</span>
                   <ChevronRight className="size-4 text-muted-foreground transition group-hover:text-primary" />
@@ -279,17 +283,16 @@ export function AcademicClient({
             <Layers className="size-4 text-primary" />
             {degree} — choose a year
           </h2>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {yearsForDegree.map((y) => (
-              <button
-                key={y}
-                onClick={() => pickYear(y)}
-                className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition hover:border-primary/40"
-              >
-                <span className="font-medium text-foreground">{y}</span>
-                <ChevronRight className="size-4 text-muted-foreground transition group-hover:text-primary" />
-              </button>
-            ))}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">              {yearsForDegree.map((y) => (
+                <button
+                  key={y}
+                  onClick={() => pickYear(y)}
+                  className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition-all duration-150 hover:border-primary/40 active:scale-[0.98] active:bg-primary/5"
+                >
+                  <span className="font-medium text-foreground">{y}</span>
+                  <ChevronRight className="size-4 text-muted-foreground transition group-hover:text-primary" />
+                </button>
+              ))}
           </div>
         </div>
       )}
@@ -301,17 +304,16 @@ export function AcademicClient({
             <Layers className="size-4 text-primary" />
             {degree} · {year} — choose a branch
           </h2>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {branchesForYear.map((b) => (
-              <button
-                key={b}
-                onClick={() => pickBranch(b)}
-                className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition hover:border-primary/40"
-              >
-                <span className="font-medium text-foreground">{b}</span>
-                <ChevronRight className="size-4 text-muted-foreground transition group-hover:text-primary" />
-              </button>
-            ))}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">              {branchesForYear.map((b) => (
+                <button
+                  key={b}
+                  onClick={() => pickBranch(b)}
+                  className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition-all duration-150 hover:border-primary/40 active:scale-[0.98] active:bg-primary/5"
+                >
+                  <span className="font-medium text-foreground">{b}</span>
+                  <ChevronRight className="size-4 text-muted-foreground transition group-hover:text-primary" />
+                </button>
+              ))}
           </div>
         </div>
       )}
@@ -332,7 +334,7 @@ export function AcademicClient({
                 <button
                   key={s.id}
                   onClick={() => pickSubject(s.id)}
-                  className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition hover:border-primary/40"
+                  className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition-all duration-150 hover:border-primary/40 active:scale-[0.98] active:bg-primary/5"
                 >
                   <div className="min-w-0">
                     <p className="font-medium text-foreground">{s.name}</p>

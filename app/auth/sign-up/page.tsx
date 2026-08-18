@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { signUpAction } from "@/lib/auth/actions"
@@ -33,6 +33,7 @@ export default function SignUpPage() {
   const [stepIndex, setStepIndex] = useState(0)
   const [isPending, startTransition] = useTransition()
   const [errors, setErrors] = useState<FieldErrors>(EMPTY_ERRORS)
+  const submittingRef = useRef(false)
   const [values, setValues] = useState({
     realName: "",
     phone: "",
@@ -90,10 +91,13 @@ export default function SignUpPage() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    // Guard: prevent duplicate submissions (React Strict Mode, rapid clicks).
+    if (submittingRef.current || isPending) return
     const errs = validateStep()
     setErrors(errs)
     if (Object.keys(errs).length > 0) return
     setErrors(EMPTY_ERRORS)
+    submittingRef.current = true
 
     const formData = new FormData()
     formData.set("realName", values.realName)
@@ -107,6 +111,7 @@ export default function SignUpPage() {
 
     startTransition(async () => {
       const result = await signUpAction(formData)
+      submittingRef.current = false
       if (result.error) {
         // Surface server-side errors field-specifically where we can map them.
         const err = result.error
@@ -118,19 +123,15 @@ export default function SignUpPage() {
         return
       }
       if (result.needsEmailConfirmation) {
-        // Email confirmation is enabled: the account is created but not yet
-        // active — the user must click the confirmation link in their inbox.
         router.push("/auth/sign-up-success")
       } else {
-        // Email confirmation is disabled on this project: the account is
-        // already active and signed in — go straight to the dashboard.
         router.push("/dashboard")
       }
     })
   }
 
   return (
-    <main className="flex min-h-svh items-center justify-center bg-background px-4 py-16">
+    <main className="flex min-h-dvh items-start justify-center bg-background px-4 py-8 sm:items-center sm:py-16">
       <div className="w-full max-w-md">
         <Link
           href="/"
@@ -144,12 +145,12 @@ export default function SignUpPage() {
           <UreSphereLogo className="h-6" wordmark />
         </div>
 
-        <h1 className="mb-2 font-serif text-3xl text-foreground text-balance">Claim your campus identity.</h1>
-        <p className="mb-8 text-sm leading-relaxed text-muted-foreground">
+        <h1 className="mb-2 font-serif text-2xl text-foreground text-balance sm:text-3xl">Claim your campus identity.</h1>
+        <p className="mb-6 text-sm leading-relaxed text-muted-foreground sm:mb-8">
           We verify who you are once, privately. Everyone else only ever sees your anonymous handle.
         </p>
 
-        <div className="mb-8 flex items-center gap-2" aria-hidden="true">
+        <div className="mb-6 flex items-center gap-2 sm:mb-8" aria-hidden="true">
           {STEPS.map((s, i) => (
             <div
               key={s}

@@ -1,5 +1,5 @@
 import { Orbit } from "lucide-react"
-import { WorkWithUsForm } from "./work-with-us-form"
+import { WorkWithUsForm } from "@/components/landing/work-with-us-form"
 import { AdvertiseButton } from "./advertise-button"
 
 type TeamMember = {

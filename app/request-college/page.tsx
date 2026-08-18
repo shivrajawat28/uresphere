@@ -2,16 +2,40 @@ import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { UreSphereLogo } from "@/components/brand/uresphere-logo"
 import { CollegeRequestForm } from "./college-request-form"
+import { getSiteUrl } from "@/lib/site-url"
 
 export const metadata = {
   title: "Request your college | UreSphere",
   description:
     "Can't find your college on UreSphere? Request it — our team will add it to the campus directory.",
+  alternates: {
+    canonical: "/request-college",
+  },
+  openGraph: {
+    title: "Request your college | UreSphere",
+    description:
+      "Can't find your college on UreSphere? Request it — our team will add it to the campus directory.",
+    type: "website",
+    url: "/request-college",
+  },
 }
 
 export default function RequestCollegePage() {
+  const siteUrl = getSiteUrl()
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: "Request your college on UreSphere",
+    url: `${siteUrl}/request-college`,
+    description: "Can't find your college on UreSphere? Request it — our team will add it to the campus directory.",
+  }
+
   return (
     <main className="flex min-h-svh items-center justify-center bg-background px-4 py-16">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <div className="w-full max-w-md">
         <Link
           href="/"

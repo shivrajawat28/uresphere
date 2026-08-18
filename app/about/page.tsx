@@ -2,11 +2,22 @@ import type { Metadata } from "next"
 import { createClient } from "@/lib/supabase/server"
 import { SiteNav } from "@/components/landing/site-nav"
 import { AboutContent } from "./about-content"
+import { getSiteUrl } from "@/lib/site-url"
 
 export const metadata: Metadata = {
   title: "About | UreSphere",
   description:
     "UreSphere is a campus platform where every college gets its own private Sphere. Read about why we built it, meet the team, work with us, or advertise on UreSphere.",
+  alternates: {
+    canonical: "/about",
+  },
+  openGraph: {
+    title: "About UreSphere",
+    description:
+      "UreSphere is a campus platform where every college gets its own private Sphere. Read about why we built it, meet the team, work with us, or advertise on UreSphere.",
+    type: "website",
+    url: "/about",
+  },
 }
 
 export default async function AboutPage() {
@@ -25,8 +36,26 @@ export default async function AboutPage() {
     if (adData) advertising = adData as typeof advertising
   }
 
+  const siteUrl = getSiteUrl()
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "AboutPage",
+    name: "About UreSphere",
+    url: `${siteUrl}/about`,
+    mainEntity: {
+      "@type": "Organization",
+      name: "UreSphere",
+      url: siteUrl,
+      description: "A private, campus-verified community platform.",
+    },
+  }
+
   return (
     <main className="min-h-svh bg-background">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <SiteNav />
       <AboutContent team={team} advertising={advertising} />
     </main>

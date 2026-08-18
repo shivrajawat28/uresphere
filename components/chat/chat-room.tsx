@@ -580,7 +580,7 @@ export function ChatRoom({
                               <span className={`mr-1.5 font-mono text-[10px] font-medium ${isSelf ? "text-primary-foreground/80" : "text-primary"}`}>
                                 {replyTo.authorHandle}
                               </span>
-                              <span className="line-clamp-2 break-words">{replyTo.body}</span>
+                              <span className="line-clamp-2 wrap-break-word">{replyTo.body}</span>
                             </>
                           )}
                         </span>

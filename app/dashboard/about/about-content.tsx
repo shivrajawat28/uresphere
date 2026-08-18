@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
+import { WorkWithUsForm } from "@/components/landing/work-with-us-form"
 import { TEAM_MEMBERS, type TeamMember } from "./team"
 import {
   Compass,
@@ -142,7 +143,7 @@ export function DashboardAboutContent({ sphereName }: { sphereName: string }) {
       </div>
 
       {/* Our Team */}
-      <div>
+      <div className="mb-10">
         <h2 className="mb-1 font-serif text-2xl font-medium text-foreground">Our Team</h2>
         <p className="mb-6 max-w-xl text-sm text-muted-foreground">
           The people building UreSphere, campus by campus.
@@ -153,6 +154,18 @@ export function DashboardAboutContent({ sphereName }: { sphereName: string }) {
           ))}
         </div>
       </div>
+
+      {/* Work with us */}
+      <Card className="border-border/70 bg-secondary/20">
+        <CardContent className="p-5 md:p-6">
+          <h2 className="mb-1 font-serif text-xl font-medium text-foreground">Work with us</h2>
+          <p className="mb-6 max-w-xl text-sm text-muted-foreground">
+            We&apos;re a small team building something big. If you want to help shape how campuses connect,
+            tell us about yourself.
+          </p>
+          <WorkWithUsForm />
+        </CardContent>
+      </Card>
     </div>
   )
 }
