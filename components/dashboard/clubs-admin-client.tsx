@@ -38,6 +38,7 @@ type ActivityRow = {
   venue: string
   organizer: string
   thumbnail_url: string | null
+  club_id: string
 }
 
 type ClubEventRow = {
@@ -54,6 +55,7 @@ type ClubEventRow = {
   registration_url: string
   thumbnail_url: string | null
   registration_count?: number
+  club_id: string
 }
 
 export function ClubsAdminClient({
@@ -197,11 +199,13 @@ export function ClubsAdminClient({
                           <Plus className="size-3" />Add Activity
                         </Button>
                       </div>
-                      {activities.length === 0 ? (
+                      {(() => {
+                        const clubActivities = activities.filter((a) => a.club_id === club.id)
+                        return clubActivities.length === 0 ? (
                         <p className="text-xs text-muted-foreground">No activities yet.</p>
                       ) : (
                         <div className="space-y-2">
-                          {activities.map((a) => (
+                          {clubActivities.map((a) => (
                             <div key={a.id} className="flex items-center justify-between rounded-md border border-border/60 bg-secondary/20 p-2">
                               <div className="min-w-0">
                                 <p className="text-xs font-medium text-foreground truncate">{a.title}</p>
@@ -220,7 +224,8 @@ export function ClubsAdminClient({
                             </div>
                           ))}
                         </div>
-                      )}
+                      )
+                      })()}
                     </div>
 
                     {/* Club Events Section */}
@@ -232,11 +237,13 @@ export function ClubsAdminClient({
                           <Plus className="size-3" />Add Event
                         </Button>
                       </div>
-                      {clubEvents.length === 0 ? (
+                      {(() => {
+                        const clubEvts = clubEvents.filter((e) => e.club_id === club.id)
+                        return clubEvts.length === 0 ? (
                         <p className="text-xs text-muted-foreground">No club events yet.</p>
                       ) : (
                         <div className="space-y-2">
-                          {clubEvents.map((e) => (
+                          {clubEvts.map((e) => (
                             <div key={e.id} className="flex items-center justify-between rounded-md border border-border/60 bg-secondary/20 p-2">
                               <div className="min-w-0">
                                 <p className="text-xs font-medium text-foreground truncate">{e.title}</p>
@@ -262,7 +269,8 @@ export function ClubsAdminClient({
                             </div>
                           ))}
                         </div>
-                      )}
+                      )
+                      })()}
                     </div>
 
                     {/* Add Activity Form */}
