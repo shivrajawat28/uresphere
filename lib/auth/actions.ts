@@ -1,20 +1,27 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
-import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { isValidEmail, mapAuthError, normalizeEmail, normalizeIndianPhone, validateLogin, validateSignup } from "@/lib/validation"
 
-async function getRedirectUrl() {
-  // The dev override exists so a tunneled/local Supabase project can receive
-  // auth redirects during development. Never use it in production — a stray
-  // env var must not send production auth flows to localhost.
+const FALLBACK_REDIRECT = "https://uresphere.in/auth/callback"
+
+function getRedirectUrl() {
+  // Prefer NEXT_PUBLIC_APP_URL — most reliable on Vercel where headers()
+  // may not reflect the public hostname. The path MUST include
+  // /auth/callback so Supabase recovery links land on our callback
+  // route, not the landing page.
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL
+  if (appUrl) {
+    const base = appUrl.endsWith("/") ? appUrl.slice(0, -1) : appUrl
+    return `${base}/auth/callback`
+  }
+  // Dev override: allows a tunneled/local Supabase project to receive
+  // auth redirects. Never use in production.
   if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL) {
     return process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL
   }
-  const h = await headers()
-  const origin = h.get("origin") ?? `https://${h.get("host")}`
-  return `${origin}/auth/callback`
+  return FALLBACK_REDIRECT
 }
 
 export type ActionResult = { error: string | null }
@@ -47,7 +54,7 @@ export async function signUpAction(formData: FormData): Promise<SignUpResult> {
   if (!normalizedPhone) return { error: "Enter a valid 10-digit Indian phone number.", needsEmailConfirmation: false }
 
   const supabase = await createClient()
-  const emailRedirectTo = await getRedirectUrl()
+  const emailRedirectTo = getRedirectUrl()
 
   // The college must come from the admin-managed directory. Free text never
   // creates a Sphere; unknown colleges go through /request-college instead.
@@ -160,7 +167,7 @@ export async function forgotPasswordAction(formData: FormData): Promise<ActionRe
   // callback (exchanging the PKCE code server-side) and then lands on
   // /auth/reset-password. redirectTo must be present in the project's
   // "Allowed Redirect URLs" (see the manual settings report).
-  const redirectTo = `${await getRedirectUrl()}?next=/auth/reset-password`
+  const redirectTo = `${getRedirectUrl()}?next=/auth/reset-password`
   const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
 
   if (error) {
