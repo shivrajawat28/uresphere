@@ -452,8 +452,8 @@ export function SphereAdmin({
                 <div className="space-y-1.5">
                   {liveMessages
                     .slice()
-                    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-                    .slice(-50)
+                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                    .slice(0, 50)
                     .map((m) => (
                       <div
                         key={m.id}
