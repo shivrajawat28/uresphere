@@ -7,6 +7,212 @@ import { requireSphereAction } from "@/lib/actions/admin"
 
 type ActionResult = { error: string | null }
 
+// ---------------------------------------------------------------------------
+// Group Admin Inspection — server actions for Sphere admins to inspect groups
+// ---------------------------------------------------------------------------
+
+export type GroupMemberRow = {
+  userId: string
+  handle: string
+  role: string
+  joinedAt: string
+  realName: string | null
+}
+
+export type GroupMessageRow = {
+  id: string
+  body: string
+  authorId: string
+  authorHandle: string
+  createdAt: string
+  isDeleted: boolean
+}
+
+/**
+ * Server action: fetch group details, members, and recent messages for admin inspection.
+ * Only authorized admins (sphere_admin, social_moderator with social.manage_groups) may inspect.
+ * Uses server-side authorization — a client can never bypass this.
+ */
+export async function getGroupInspectionData(groupId: string): Promise<{
+  error: string | null
+  group?: {
+    id: string
+    name: string
+    description: string
+    createdAt: string
+    creatorHandle: string
+    memberCount: number
+  }
+  members?: GroupMemberRow[]
+  messages?: GroupMessageRow[]
+  totalMessages?: number
+}> {
+  await requireMember()
+  const supabase = await createClient()
+
+  // 1. Fetch the group and verify it exists in the member's Sphere.
+  const { data: group } = await supabase
+    .from("groups")
+    .select("id, name, description, created_by, created_at, sphere_id")
+    .eq("id", groupId)
+    .maybeSingle()
+
+  if (!group) return { error: "Group not found." }
+
+  // 2. Authorization: must be able to manage groups in this Sphere.
+  const gate = await requireSphereAction(group.sphere_id, "social.manage_groups")
+  if (!gate.ok) return gate
+
+  // 3. Fetch group members.
+  const { data: memberRows } = await supabase
+    .from("group_members")
+    .select("user_id, role, joined_at")
+    .eq("group_id", groupId)
+    .order("joined_at", { ascending: true })
+
+  // 4. Resolve member profiles (real name only — no private data exposed).
+  const memberUserIds = (memberRows ?? []).map((m) => m.user_id)
+  const { data: profileRows } = memberUserIds.length
+    ? await supabase
+        .from("profiles")
+        .select("id, real_name")
+        .in("id", memberUserIds)
+    : { data: [] as { id: string; real_name: string }[] }
+
+  // 5. Resolve anonymous handles.
+  const { data: handleRows } = memberUserIds.length
+    ? await supabase
+        .from("user_spheres")
+        .select("user_id, anonymous_handle")
+        .in("user_id", memberUserIds)
+    : { data: [] as { user_id: string; anonymous_handle: string }[] }
+
+  const profileById = new Map((profileRows ?? []).map((p) => [p.id, p]))
+  const handleById = new Map((handleRows ?? []).map((h) => [h.user_id, h.anonymous_handle]))
+
+  const members: GroupMemberRow[] = (memberRows ?? []).map((m) => ({
+    userId: m.user_id,
+    handle: handleById.get(m.user_id) ?? "Unknown",
+    role: m.role,
+    joinedAt: m.joined_at,
+    realName: profileById.get(m.user_id)?.real_name ?? null,
+  }))
+
+  // 6. Fetch recent messages (limit 100 for admin inspection).
+  const { data: messageRows } = await supabase
+    .from("group_messages")
+    .select("id, body, author_id, created_at, is_deleted")
+    .eq("group_id", groupId)
+    .order("created_at", { ascending: false })
+    .limit(100)
+
+  // 7. Count total messages.
+  const { count: totalMessages } = await supabase
+    .from("group_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("group_id", groupId)
+
+  // Resolve message author handles.
+  const messageAuthorIds = Array.from(new Set((messageRows ?? []).map((m) => m.author_id)))
+  const { data: msgHandleRows } = messageAuthorIds.length
+    ? await supabase
+        .from("user_spheres")
+        .select("user_id, anonymous_handle")
+        .in("user_id", messageAuthorIds)
+    : { data: [] as { user_id: string; anonymous_handle: string }[] }
+
+  const msgHandleById = new Map((msgHandleRows ?? []).map((h) => [h.user_id, h.anonymous_handle]))
+
+  const messages: GroupMessageRow[] = (messageRows ?? [])
+    .reverse()
+    .map((m) => ({
+      id: m.id,
+      body: m.body,
+      authorId: m.author_id,
+      authorHandle: msgHandleById.get(m.author_id) ?? "Unknown",
+      createdAt: m.created_at,
+      isDeleted: m.is_deleted,
+    }))
+
+  // Resolve creator handle.
+  const creatorHandle = handleById.get(group.created_by) ?? "Unknown"
+
+  return {
+    error: null,
+    group: {
+      id: group.id,
+      name: group.name,
+      description: group.description,
+      createdAt: group.created_at,
+      creatorHandle,
+      memberCount: members.length,
+    },
+    members,
+    messages,
+    totalMessages: totalMessages ?? 0,
+  }
+}
+
+/**
+ * Server action: toggle group notification mute for the current user.
+ */
+export async function toggleGroupMuteAction(
+  groupId: string,
+  muted: boolean,
+): Promise<ActionResult> {
+  const member = await requireMember()
+  const supabase = await createClient()
+
+  // Verify the user is a member of the group.
+  const { data: membership } = await supabase
+    .from("group_members")
+    .select("group_id")
+    .eq("group_id", groupId)
+    .eq("user_id", member.userId)
+    .maybeSingle()
+  if (!membership) return { error: "You're not a member of this group." }
+
+  const { error } = await supabase
+    .from("group_notification_preferences")
+    .upsert(
+      {
+        user_id: member.userId,
+        group_id: groupId,
+        muted,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,group_id" },
+    )
+
+  if (error) return { error: "Couldn't update notification preference." }
+  revalidatePath("/dashboard/groups")
+  return { error: null }
+}
+
+/**
+ * Server action: fetch current user's group mute status for a group.
+ */
+export async function getGroupMuteStatus(groupId: string): Promise<{
+  error: string | null
+  muted?: boolean
+}> {
+  const member = await requireMember()
+  const supabase = await createClient()
+
+  const { data } = await supabase
+    .from("group_notification_preferences")
+    .select("muted")
+    .eq("user_id", member.userId)
+    .eq("group_id", groupId)
+    .maybeSingle()
+
+  return { error: null, muted: data?.muted ?? false }
+}
+
+// ---------------------------------------------------------------------------
+// Existing group actions
+// ---------------------------------------------------------------------------
+
 export async function createGroupAction(formData: FormData): Promise<ActionResult> {
   const member = await requireMember()
   const supabase = await createClient()

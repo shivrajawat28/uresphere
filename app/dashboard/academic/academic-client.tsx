@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useRef, useTransition } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   createSubjectAction,
@@ -20,7 +20,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { AdCard } from "@/components/ads/ad-card"
 import type { AdCampaign } from "@/lib/ads"
@@ -44,6 +43,9 @@ import {
   GraduationCap,
   Layers,
   ArrowLeft,
+  AlertCircle,
+  FileUp,
+  Loader2,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -265,7 +267,7 @@ export function AcademicClient({
                 <button
                   key={d}
                   onClick={() => pickDegree(d)}
-                  className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition-all duration-150 hover:border-primary/40 active:scale-[0.98] active:bg-primary/5"
+                  className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm active:scale-[0.98] active:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 >
                   <span className="font-serif text-lg text-foreground">{d}</span>
                   <ChevronRight className="size-4 text-muted-foreground transition group-hover:text-primary" />
@@ -287,7 +289,7 @@ export function AcademicClient({
                 <button
                   key={y}
                   onClick={() => pickYear(y)}
-                  className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition-all duration-150 hover:border-primary/40 active:scale-[0.98] active:bg-primary/5"
+                  className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm active:scale-[0.98] active:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 >
                   <span className="font-medium text-foreground">{y}</span>
                   <ChevronRight className="size-4 text-muted-foreground transition group-hover:text-primary" />
@@ -308,7 +310,7 @@ export function AcademicClient({
                 <button
                   key={b}
                   onClick={() => pickBranch(b)}
-                  className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition-all duration-150 hover:border-primary/40 active:scale-[0.98] active:bg-primary/5"
+                  className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm active:scale-[0.98] active:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 >
                   <span className="font-medium text-foreground">{b}</span>
                   <ChevronRight className="size-4 text-muted-foreground transition group-hover:text-primary" />
@@ -334,7 +336,7 @@ export function AcademicClient({
                 <button
                   key={s.id}
                   onClick={() => pickSubject(s.id)}
-                  className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition-all duration-150 hover:border-primary/40 active:scale-[0.98] active:bg-primary/5"
+                  className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm active:scale-[0.98] active:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 >
                   <div className="min-w-0">
                     <p className="font-medium text-foreground">{s.name}</p>
@@ -422,34 +424,45 @@ export function AcademicClient({
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               {visibleResources.map((r) => (
-                <Card key={r.id} className="border-border/70 bg-card">
-                  <CardContent className="flex items-center justify-between gap-3 p-4">
-                    {/* Opens in the same tab so browser Back returns to this
-                        exact degree → year → subject context instead of the
-                        Academic homepage. */}
-                    <a href={r.url} rel="noopener noreferrer" className="flex min-w-0 items-center gap-3">
-                      <FileText className="size-5 shrink-0 text-primary" />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-foreground hover:underline">{r.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {r.subjectName} · {TYPE_LABELS[r.type] ?? r.type}
-                          {r.unitName ? ` · ${r.unitName}` : ""}
-                        </p>
-                      </div>
-                    </a>
-                    {isAdmin && (
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        onClick={() => run(() => deleteResourceAction(r.id), "Resource deleted")}
-                        disabled={isPending}
-                        aria-label="Delete resource"
-                      >
-                        <Trash2 className="size-3.5 text-muted-foreground hover:text-destructive" />
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
+                <a
+                  key={r.id}
+                  href={r.url}
+                  rel="noopener noreferrer"
+                  className="group/resource flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-card p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm active:scale-[0.98] active:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <FileText className="size-5 shrink-0 text-primary transition-transform duration-150 group-hover/resource:scale-110" />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground transition-colors group-hover/resource:text-primary">{r.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {r.subjectName} · {TYPE_LABELS[r.type] ?? r.type}
+                        {r.unitName ? ` · ${r.unitName}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                  {isAdmin && (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        run(() => deleteResourceAction(r.id), "Resource deleted")
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          run(() => deleteResourceAction(r.id), "Resource deleted")
+                        }
+                      }}
+                      className="flex size-6 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
+                      aria-label="Delete resource"
+                    >
+                      <Trash2 className="size-3.5 text-muted-foreground hover:text-destructive" />
+                    </span>
+                  )}
+                </a>
               ))}
             </div>
           )}
@@ -485,76 +498,14 @@ export function AcademicClient({
       </section>
 
       {/* Upload resource */}
-      <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Upload a resource</DialogTitle>
-            <DialogDescription>Admins can add notes, syllabi, and previous papers for students.</DialogDescription>
-          </DialogHeader>
-          <form
-            action={(formData) =>
-              run(() => {
-                formData.set("sphereId", member.sphereId ?? "")
-                const p = uploadResourceAction(formData)
-                return p.then((r) => {
-                  if (!r.error) setUploadOpen(false)
-                  return r
-                })
-              }, "Resource uploaded")
-            }
-            className="flex flex-col gap-4"
-          >
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="title">Title</Label>
-              <Input id="title" name="title" required placeholder="Data Structures — Unit 3 notes" />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label>Subject</Label>
-              <Select name="subjectId" defaultValue={selectedSubject?.id ?? ""}>
-                <SelectTrigger>
-                  <SelectValue placeholder="General" />
-                </SelectTrigger>
-                <SelectContent>
-                  {subjects.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label>Type</Label>
-              <Select name="type" defaultValue="notes">
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(TYPE_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="url">File or document URL</Label>
-              <Input id="url" name="url" type="url" required placeholder="https://..." />
-            </div>
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button type="button" variant="ghost">
-                  Cancel
-                </Button>
-              </DialogClose>
-              <Button type="submit" disabled={isPending}>
-                Upload
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <UploadResourceDialog
+        open={uploadOpen}
+        onOpenChange={setUploadOpen}
+        selectedSubjectId={selectedSubject?.id ?? null}
+        subjects={subjects}
+        isPending={isPending}
+        startTransition={startTransition}
+      />
 
       {/* New subject */}
       <Dialog open={subjectOpen} onOpenChange={setSubjectOpen}>
@@ -716,5 +667,226 @@ export function AcademicClient({
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Upload resource dialog — handles file upload to Vercel Blob then creates
+// the academic resource record via the server action.
+// ---------------------------------------------------------------------------
+
+function UploadResourceDialog({
+  open,
+  onOpenChange,
+  selectedSubjectId,
+  subjects,
+  isPending,
+  startTransition,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  selectedSubjectId: string | null
+  subjects: { id: string; name: string }[]
+  isPending: boolean
+  startTransition: React.TransitionStartFunction
+}) {
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null)
+  const [fileName, setFileName] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  function resetDialog() {
+    setUploading(false)
+    setUploadError(null)
+    setUploadedUrl(null)
+    setFileName(null)
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }
+
+  function handleOpenChange(isOpen: boolean) {
+    if (!isOpen) resetDialog()
+    onOpenChange(isOpen)
+  }
+
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploadError(null)
+    setUploadedUrl(null)
+    setFileName(file.name)
+    setUploading(true)
+
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        setUploadError(data.error || "Upload failed")
+        setUploading(false)
+        return
+      }
+
+      setUploadedUrl(data.url)
+      setUploading(false)
+    } catch {
+      setUploadError("Upload failed. Please try again.")
+      setUploading(false)
+    }
+  }
+
+  function handleCreateResource(formData: FormData) {
+    if (!uploadedUrl) {
+      setUploadError("Please upload a file first.")
+      return
+    }
+
+    startTransition(async () => {
+      formData.set("url", uploadedUrl)
+      const result = await uploadResourceAction(formData)
+      if (result.error) {
+        setUploadError(result.error)
+        return
+      }
+      toast.success("Resource uploaded")
+      handleOpenChange(false)
+    })
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Upload a resource</DialogTitle>
+          <DialogDescription>
+            Upload a PDF, notes, or document for students. Max file size: 5MB.
+          </DialogDescription>
+        </DialogHeader>
+        <form action={handleCreateResource} className="flex flex-col gap-4">
+          {/* File upload area */}
+          <div className="flex flex-col gap-2">
+            <Label>File</Label>
+            <div
+              onClick={() => !uploading && fileInputRef.current?.click()
+              }
+              onKeyDown={(e) => {
+                if ((e.key === "Enter" || e.key === " ") && !uploading) {
+                  e.preventDefault()
+                  fileInputRef.current?.click()
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              className={`flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed p-6 text-center transition-colors ${
+                uploadedUrl
+                  ? "border-green-500/40 bg-green-500/5"
+                  : "border-border/70 hover:border-primary/40 hover:bg-primary/5"
+              } ${uploading ? "pointer-events-none opacity-60" : ""}`}
+            >
+              {uploading ? (
+                <>
+                  <Loader2 className="size-6 animate-spin text-primary" />
+                  <p className="text-sm text-muted-foreground">Uploading…</p>
+                </>
+              ) : uploadedUrl ? (
+                <>
+                  <FileUp className="size-6 text-green-500" />
+                  <p className="text-sm font-medium text-foreground">{fileName}</p>
+                  <p className="text-xs text-green-600">Uploaded successfully. Click to replace.</p>
+                </>
+              ) : (
+                <>
+                  <FileUp className="size-6 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    Click to upload a PDF, image, or document
+                  </p>
+                  <p className="text-xs text-muted-foreground/70">PDF, JPEG, PNG, WebP, GIF — max 5MB</p>
+                </>
+              )}
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.webp,.gif"
+              onChange={handleFileSelect}
+              className="hidden"
+              aria-label="Upload file"
+            />
+            {uploadError && (
+              <div
+                role="alert"
+                className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              >
+                <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                <span>{uploadError}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="upload-title">Title</Label>
+            <Input
+              id="upload-title"
+              name="title"
+              required
+              placeholder="Data Structures — Unit 3 notes"
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Subject</Label>
+            <Select name="subjectId" defaultValue={selectedSubjectId ?? ""}>
+              <SelectTrigger>
+                <SelectValue placeholder="General" />
+              </SelectTrigger>
+              <SelectContent>
+                {subjects.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Type</Label>
+            <Select name="type" defaultValue="notes">
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(TYPE_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {/* Hidden url field — populated from the file upload */}
+          <input type="hidden" name="url" value={uploadedUrl ?? ""} />
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="ghost">
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              type="submit"
+              disabled={isPending || uploading || !uploadedUrl}
+            >
+              {(isPending || uploading) && <Loader2 className="size-4 animate-spin" />}
+              Upload
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import Image from "next/image"
+import { ImageCarousel } from "@/components/marketplace/image-carousel"
 import { CheckCircle2, Loader2, ShieldAlert, XCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -32,7 +32,13 @@ const CATEGORY_LABELS: Record<string, string> = {
  * may review listings (server-gated in the page); every action is re-gated
  * server-side in reviewListingAction.
  */
-export function MarketplaceAdminReview({ pendingListings }: { pendingListings: PendingListing[] }) {
+export function MarketplaceAdminReview({
+  pendingListings,
+  currentUserId,
+}: {
+  pendingListings: PendingListing[]
+  currentUserId: string
+}) {
   const [isPending, startTransition] = useTransition()
 
   if (pendingListings.length === 0) return null
@@ -47,7 +53,13 @@ export function MarketplaceAdminReview({ pendingListings }: { pendingListings: P
       </div>
       <div className="space-y-3">
         {pendingListings.map((listing) => (
-          <ReviewRow key={listing.id} listing={listing} isPending={isPending} startTransition={startTransition} />
+          <ReviewRow
+            key={listing.id}
+            listing={listing}
+            isPending={isPending}
+            startTransition={startTransition}
+            currentUserId={currentUserId}
+          />
         ))}
       </div>
     </div>
@@ -58,10 +70,12 @@ function ReviewRow({
   listing,
   isPending,
   startTransition,
+  currentUserId,
 }: {
   listing: PendingListing
   isPending: boolean
   startTransition: (fn: () => void) => void
+  currentUserId: string
 }) {
   const [price, setPrice] = useState("")
   const [reason, setReason] = useState("")
@@ -78,13 +92,7 @@ function ReviewRow({
     <Card className="border-border/70 bg-card">
       <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start">
         <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-md border border-border bg-muted sm:h-24 sm:w-24">
-          {listing.image_urls[0] ? (
-            <Image src={listing.image_urls[0]} alt={listing.title} fill unoptimized className="object-contain" />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-[9px] text-muted-foreground">
-              No photo
-            </div>
-          )}
+          <ImageCarousel images={listing.image_urls} alt={listing.title} />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-start justify-between gap-2">
@@ -132,14 +140,22 @@ function ReviewRow({
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button size="sm" className="gap-1.5" disabled={isPending} onClick={() => review("approve")}>
-              {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
-              Approve
-            </Button>
-            <Button size="sm" variant="destructive" className="gap-1.5" disabled={isPending} onClick={() => review("reject")}>
-              <XCircle className="size-3.5" />
-              Reject
-            </Button>
+            {listing.seller_id === currentUserId ? (
+              <p className="text-xs text-muted-foreground italic">
+                This is your listing — you cannot review it.
+              </p>
+            ) : (
+              <>
+                <Button size="sm" className="gap-1.5" disabled={isPending} onClick={() => review("approve")}>
+                  {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+                  Approve
+                </Button>
+                <Button size="sm" variant="destructive" className="gap-1.5" disabled={isPending} onClick={() => review("reject")}>
+                  <XCircle className="size-3.5" />
+                  Reject
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </CardContent>

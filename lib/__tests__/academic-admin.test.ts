@@ -368,8 +368,18 @@ describe("assignRoleAction — academic_manager sections", () => {
   it("persists multiple sections for an academic_manager", async () => {
     vi.mocked(requireMember).mockResolvedValue({ ...MEMBER, role: "super_admin" } as never)
     const upsert = vi.fn().mockResolvedValue({ error: null })
+    // The code now checks for existing assignments before upserting (merge logic).
+    const existingSelect = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: null }),
+          }),
+        }),
+      }),
+    })
     const from = vi.fn((table: string) => {
-      if (table === "role_assignments") return { upsert }
+      if (table === "role_assignments") return { upsert, select: existingSelect }
       if (table === "spheres") {
         return { select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: { name: "ITS" }, error: null }) }) }) }
       }
@@ -394,6 +404,97 @@ describe("assignRoleAction — academic_manager sections", () => {
     ])
     // Legacy scalars = first section for backward compatibility.
     expect(payload.scope.year).toBe("First Year")
+  })
+
+  it("merges new sections with existing ones (additive assignment)", async () => {
+    vi.mocked(requireMember).mockResolvedValue({ ...MEMBER, role: "super_admin" } as never)
+    const upsert = vi.fn().mockResolvedValue({ error: null })
+    // Simulate existing assignment with one section already stored.
+    const existingSelect = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: {
+                scope: {
+                  sections: [{ degree: "", year: "Second Year", branch: "CSE" }],
+                  permissions: ["academic.read", "academic.create"],
+                },
+              },
+            }),
+          }),
+        }),
+      }),
+    })
+    const from = vi.fn((table: string) => {
+      if (table === "role_assignments") return { upsert, select: existingSelect }
+      if (table === "spheres") {
+        return { select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: { name: "ITS" }, error: null }) }) }) }
+      }
+      return {}
+    })
+    vi.mocked(createClient).mockReturnValue({ from, rpc: vi.fn().mockResolvedValue({ error: null }) } as never)
+
+    // Assign a NEW section — should merge with the existing CSE section.
+    const fd = new FormData()
+    fd.set("userId", "u9")
+    fd.set("sphereId", "s-its")
+    fd.set("role", "academic_manager")
+    fd.set("permissions", "academic.read,academic.create")
+    fd.set("sections", JSON.stringify([{ degree: "", year: "Second Year", branch: "ECE" }]))
+
+    const result = await assignRoleAction(fd)
+    expect(result.error).toBeNull()
+    const [payload] = upsert.mock.calls[0]
+    // Must contain BOTH the existing CSE and the new ECE.
+    expect(payload.scope.sections).toEqual([
+      { degree: "", year: "Second Year", branch: "CSE" },
+      { degree: "", year: "Second Year", branch: "ECE" },
+    ])
+  })
+
+  it("deduplicates sections when assigning the same section twice", async () => {
+    vi.mocked(requireMember).mockResolvedValue({ ...MEMBER, role: "super_admin" } as never)
+    const upsert = vi.fn().mockResolvedValue({ error: null })
+    // Existing has CSE already.
+    const existingSelect = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: {
+                scope: {
+                  sections: [{ degree: "", year: "2", branch: "CSE" }],
+                  permissions: ["academic.read"],
+                },
+              },
+            }),
+          }),
+        }),
+      }),
+    })
+    const from = vi.fn((table: string) => {
+      if (table === "role_assignments") return { upsert, select: existingSelect }
+      if (table === "spheres") {
+        return { select: vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ maybeSingle: vi.fn().mockResolvedValue({ data: { name: "ITS" }, error: null }) }) }) }
+      }
+      return {}
+    })
+    vi.mocked(createClient).mockReturnValue({ from, rpc: vi.fn().mockResolvedValue({ error: null }) } as never)
+
+    // Assign the SAME CSE section again — should not duplicate.
+    const fd = new FormData()
+    fd.set("userId", "u9")
+    fd.set("sphereId", "s-its")
+    fd.set("role", "academic_manager")
+    fd.set("permissions", "academic.read")
+    fd.set("sections", JSON.stringify([{ degree: "", year: "2", branch: "CSE" }]))
+
+    const result = await assignRoleAction(fd)
+    expect(result.error).toBeNull()
+    const [payload] = upsert.mock.calls[0]
+    expect(payload.scope.sections).toHaveLength(1)
+    expect(payload.scope.sections[0].branch).toBe("CSE")
   })
 
   it("ignores sections for non-academic roles (no scope leakage)", async () => {

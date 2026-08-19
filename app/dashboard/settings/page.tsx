@@ -5,6 +5,7 @@ import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { RegenerateHandleButton } from "@/components/dashboard/regenerate-handle-button"
 import { SignOutButton } from "@/components/dashboard/sign-out-button"
+import { NotificationSettings } from "@/components/dashboard/notification-settings"
 import { Shield, Mail, Phone, GraduationCap } from "lucide-react"
 
 export default async function SettingsPage() {
@@ -99,6 +100,8 @@ export default async function SettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        <NotificationSettings />
 
         <div className="flex justify-end pt-2">
           <SignOutButton />

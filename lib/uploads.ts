@@ -1,6 +1,6 @@
 export const MAX_FILE_BYTES = 5 * 1024 * 1024
 
-export const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"])
+export const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif", "image/heic", "image/heif"])
 
 /**
  * Normalizes an origin string (trailing slashes stripped, scheme+host kept,
@@ -97,6 +97,19 @@ export function sniffImageTypeFromBytes(head: Uint8Array): string | null {
   ) {
     return "image/webp"
   }
+  // ISOBMFF container (AVIF, HEIC, HEIF): "...." "ftyp" then brand at offset 8-11
+  if (head[4] === 0x66 && head[5] === 0x74 && head[6] === 0x79 && head[7] === 0x70) {
+    const b8 = String.fromCharCode(head[8], head[9], head[10], head[11])
+    // AVIF brands
+    if (b8 === "avif" || b8 === "avis") return "image/avif"
+    // HEIC/HEIF brands — covers iPhones, Android HEIF, and generic HEIF containers
+    if (
+      b8 === "heic" || b8 === "heix" || b8 === "hevc" ||
+      b8 === "mif1" || b8 === "msf1" || b8 === "hevx"
+    ) {
+      return "image/heic"
+    }
+  }
   return null
 }
 
@@ -107,24 +120,5 @@ export function sniffImageTypeFromBytes(head: Uint8Array): string | null {
  */
 export async function sniffImageType(file: Blob): Promise<string | null> {
   const head = new Uint8Array(await file.slice(0, 12).arrayBuffer())
-  // JPEG: FF D8 FF
-  if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) return "image/jpeg"
-  // PNG: 89 50 4E 47 0D 0A 1A 0A
-  if (head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47) return "image/png"
-  // GIF87a / GIF89a
-  if (head[0] === 0x47 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x38) return "image/gif"
-  // WebP: "RIFF" .... "WEBP"
-  if (
-    head[0] === 0x52 &&
-    head[1] === 0x49 &&
-    head[2] === 0x46 &&
-    head[3] === 0x46 &&
-    head[8] === 0x57 &&
-    head[9] === 0x45 &&
-    head[10] === 0x42 &&
-    head[11] === 0x50
-  ) {
-    return "image/webp"
-  }
-  return null
+  return sniffImageTypeFromBytes(head)
 }

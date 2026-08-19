@@ -30,6 +30,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog"
 import { toast } from "sonner"
+import { GroupMuteButton } from "@/components/dashboard/group-mute-button"
 import {
   Users,
   Plus,
@@ -504,6 +505,7 @@ function GroupChat({
         </div>
         {group.isMember && (
           <div className="flex shrink-0 gap-1.5">
+            <GroupMuteButton groupId={group.id} />
             <Button size="sm" variant="outline" className="gap-1.5" onClick={onOpenInvite}>
               <UserPlus className="size-3.5" />
               Invite

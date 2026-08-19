@@ -12,6 +12,12 @@ import { createClient } from "@/lib/supabase/client"
  * half: it records "the user was here" so an active user's timestamp never
  * goes stale, and a returning user's timestamp is refreshed on arrival.
  *
+ * Session persistence: on every meaningful return (including browser reopen
+ * via visibilitychange), the Supabase client's getUser() call triggers an
+ * automatic token refresh if the access token is expired but the refresh
+ * token is still valid. This is what keeps users logged in after closing
+ * and reopening the browser.
+ *
  * Two classes of trigger:
  *   - Meaningful returns (always write — they are low frequency by nature):
  *     initial authenticated load, route change / navigation (the layout stays
@@ -43,6 +49,9 @@ export function ActivityTracker() {
       if (!force && now - lastWriteRef.current < ACTIVITY_WRITE_INTERVAL_MS) return
       inFlightRef.current = true
       try {
+        // getUser() automatically refreshes the session if the access token
+        // is expired but the refresh token is valid. This is the key call
+        // that keeps users logged in after closing and reopening the browser.
         const {
           data: { user },
         } = await supabase.auth.getUser()

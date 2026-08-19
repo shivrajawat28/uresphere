@@ -16,6 +16,10 @@ export async function createClient() {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: ONE_YEAR,
+      // Explicit path ensures the auth cookies are read consistently
+      // across all routes, which is critical for session persistence
+      // when the user returns after closing the browser.
+      path: "/",
     },
     cookies: {
       getAll() {

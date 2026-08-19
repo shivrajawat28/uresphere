@@ -1,8 +1,8 @@
 "use client"
 
-import Image from "next/image"
 import { useState, useTransition } from "react"
-import { MoreVertical, Flag, Trash2, CheckCircle2, ImageOff, ShoppingCart, Loader2 } from "lucide-react"
+import { MoreVertical, Flag, Trash2, CheckCircle2, ShoppingCart, Loader2 } from "lucide-react"
+import { ImageCarousel } from "@/components/marketplace/image-carousel"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -41,7 +41,6 @@ export function ListingCard({ listing, currentUserId }: { listing: Listing; curr
   const [buyOpen, setBuyOpen] = useState(false)
   const [reason, setReason] = useState("")
   const [isPending, startTransition] = useTransition()
-  const coverImage = listing.image_urls[0]
   const publicStatus = listing.status === "active" || listing.status === "sold"
   const effectivePrice = listing.admin_price_cents ?? listing.price_cents
 
@@ -84,13 +83,7 @@ export function ListingCard({ listing, currentUserId }: { listing: Listing; curr
   return (
     <Card className="overflow-hidden border-border bg-card">
       <div className="relative aspect-[4/3] w-full bg-muted">
-        {coverImage ? (
-          <Image src={coverImage} alt={listing.title} fill className="object-cover" unoptimized />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center">
-            <ImageOff className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
-          </div>
-        )}
+        <ImageCarousel images={listing.image_urls} alt={listing.title} />
         {listing.status === "sold" && (
           <div className="absolute inset-0 flex items-center justify-center bg-background/70">
             <Badge className="bg-primary text-primary-foreground">Sold</Badge>

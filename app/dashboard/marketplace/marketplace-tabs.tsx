@@ -84,7 +84,12 @@ export function MarketplaceTabs({
 
       {tab === "marketplace" && (
         <>
-          {canReviewListings && <MarketplaceAdminReview pendingListings={pendingListings} />}
+          {canReviewListings && (
+            <MarketplaceAdminReview
+              pendingListings={pendingListings}
+              currentUserId={currentUserId}
+            />
+          )}
           <MarketplaceGrid listings={listings} currentUserId={currentUserId} />
         </>
       )}

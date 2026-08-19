@@ -29,7 +29,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { toast } from "sonner"
-import { Search, ArrowLeft, Users, ShieldCheck, Plus, X } from "lucide-react"
+import { Search, ArrowLeft, Users, ShieldCheck, Plus, X, Eye } from "lucide-react"
+import { GroupInspectionDialog } from "@/components/admin/group-inspection-dialog"
 import { OrdersSection, ShopProductsSection } from "../../platform-sections"
 
 type UserRow = {
@@ -158,6 +159,7 @@ export function SphereAdmin({
   const [userQuery, setUserQuery] = useState("")
   const [liveMessages, setLiveMessages] = useState<SocialMessage[]>(messages)
   const [selectedMember, setSelectedMember] = useState<UserRow | null>(null)
+  const [inspectingGroup, setInspectingGroup] = useState<string | null>(null)
   const handleCache = useRef(new Map<string, string>())
 
   // Live discussion: subscribe to new messages / deletes in this Sphere only.
@@ -572,14 +574,25 @@ export function SphereAdmin({
                     <Badge variant="outline" className="shrink-0 border-border/60 text-[10px] font-normal">
                       {g.memberCount} {g.memberCount === 1 ? "member" : "members"}
                     </Badge>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      disabled={isPending}
-                      onClick={() => run(() => adminDeleteGroupAction(g.id), "Group deleted")}
-                    >
-                      Delete
-                    </Button>
+                    <div className="flex shrink-0 gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5"
+                        onClick={() => setInspectingGroup(g.id)}
+                      >
+                        <Eye className="size-3.5" />
+                        Inspect
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={isPending}
+                        onClick={() => run(() => adminDeleteGroupAction(g.id), "Group deleted")}
+                      >
+                        Delete
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               ))
@@ -880,6 +893,12 @@ export function SphereAdmin({
             onClose={() => setSelectedMember(null)}
           />
         )}
+
+        <GroupInspectionDialog
+          groupId={inspectingGroup}
+          open={inspectingGroup !== null}
+          onOpenChange={(open) => { if (!open) setInspectingGroup(null) }}
+        />
 
         {/* Audit log */}
         <TabsContent value="audit" className="space-y-2">

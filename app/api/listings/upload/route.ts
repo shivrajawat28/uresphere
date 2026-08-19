@@ -41,7 +41,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
-    if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+    // Accept any image/* MIME type from the browser — the real validation is
+    // done by magic-byte sniffing below. Browsers may report non-standard or
+    // empty MIME types for HEIC/HEIF, camera photos, etc., so we only
+    // reject obviously non-image types at this stage.
+    const mimeIsImage = file.type.startsWith("image/") || file.type === ""
+    if (!mimeIsImage) {
       return NextResponse.json({ error: "Unsupported file type" }, { status: 400 })
     }
 

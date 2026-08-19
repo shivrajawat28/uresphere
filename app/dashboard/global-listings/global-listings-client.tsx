@@ -35,10 +35,13 @@ export function GlobalListingsClient({
   member,
   listings,
 }: {
-  member: { role: string }
+  member: { role: string; canManageGlobalListings: boolean }
   listings: GlobalListing[]
 }) {
-  const isSuperAdmin = member.role === "super_admin"
+  // Use the server-computed permission flag. This ensures the UI is only
+  // shown to users who actually have the listing_manager role assignment
+  // or are super admins — the server checked this before rendering.
+  const canManage = member.canManageGlobalListings
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState("all")
   const [editing, setEditing] = useState<GlobalListing | "new" | null>(null)
@@ -77,7 +80,7 @@ export function GlobalListingsClient({
             Hostels, cafés, gyms, and local businesses — the same listings in every Sphere, maintained by UreSphere.
           </p>
         </div>
-        {isSuperAdmin && (
+        {canManage && (
           <Button size="sm" className="gap-1.5" onClick={() => setEditing("new")}>
             <Plus className="size-3.5" />
             Add listing
@@ -136,7 +139,7 @@ export function GlobalListingsClient({
                     {listing.city || "—"}
                     {listing.address ? ` · ${listing.address}` : ""}
                   </p>
-                  {isSuperAdmin && (
+                  {canManage && (
                     <div className="flex gap-1">
                       <Button size="icon-sm" variant="ghost" onClick={() => setEditing(listing)} aria-label="Edit">
                         <Pencil className="size-3.5" />

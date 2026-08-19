@@ -23,6 +23,22 @@ export default async function GlobalListingsPage() {
   const member = await requireMember()
   const supabase = await createClient()
 
+  // Server-side: determine if the user can manage global listings.
+  // This is checked BOTH here (for UI visibility) AND in the server
+  // actions (for authorization). The server-side check is authoritative;
+  // this flag only controls what the client component renders.
+  let canManage = member.role === "super_admin"
+  if (!canManage) {
+    const { data: assignment } = await supabase
+      .from("role_assignments")
+      .select("id")
+      .eq("user_id", member.userId)
+      .eq("role", "listing_manager")
+      .limit(1)
+      .maybeSingle()
+    canManage = Boolean(assignment)
+  }
+
   const { data: listings } = await supabase
     .from("global_listings")
     .select(
@@ -36,7 +52,8 @@ export default async function GlobalListingsPage() {
       member={
         {
           role: member.role,
-        } as Pick<CurrentMember, "role">
+          canManageGlobalListings: canManage,
+        } as Pick<CurrentMember, "role"> & { canManageGlobalListings: boolean }
       }
       listings={(listings ?? []) as GlobalListing[]}
     />

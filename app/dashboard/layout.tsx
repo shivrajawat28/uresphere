@@ -4,6 +4,8 @@ import { requireMember } from "@/lib/data/session"
 import { createClient } from "@/lib/supabase/server"
 import { loadAssignedSectionRoles } from "@/lib/data/section-admin"
 import { DashboardNav } from "@/components/dashboard/dashboard-nav"
+import { NotificationCenter } from "@/components/dashboard/notification-center"
+import { PushNotificationManager } from "@/components/dashboard/push-notification-manager"
 
 // Private area: never indexable, even if a crawler ignores robots.txt.
 export const metadata: Metadata = {
@@ -40,7 +42,17 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     <div className="flex min-h-svh flex-col bg-background md:flex-row">
       <DashboardNav member={member} initialUnread={unreadResult.count ?? 0} sectionAdmins={sectionAdmins} />
       {/* pb-24 reserves room for the fixed mobile bottom nav; desktop has none. */}
-      <main className="min-w-0 flex-1 overflow-x-hidden pb-24 md:pb-0">{children}</main>
+      <main className="min-w-0 flex-1 overflow-x-hidden pb-24 md:pb-0">
+        {/* Notification bell — positioned top-right on desktop, fixed on mobile */}
+        <div className="sticky top-0 z-30 flex justify-end px-4 pt-3 md:hidden">
+          <NotificationCenter userId={member.userId} initialUnread={unreadResult.count ?? 0} />
+        </div>
+        <div className="hidden md:block fixed right-6 top-4 z-30">
+          <NotificationCenter userId={member.userId} initialUnread={unreadResult.count ?? 0} />
+        </div>
+        <PushNotificationManager />
+        {children}
+      </main>
     </div>
   )
 }

@@ -19,6 +19,10 @@ export async function updateSession(request: NextRequest) {
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
         maxAge: ONE_YEAR,
+        // Explicit path ensures the auth cookies are read and written
+        // consistently across all routes, which is critical for session
+        // persistence when the user returns after closing the browser.
+        path: "/",
       },
       cookies: {
         getAll() {
@@ -36,6 +40,12 @@ export async function updateSession(request: NextRequest) {
   )
 
   // Do not run code between createServerClient and supabase.auth.getUser().
+  // IMPORTANT: getUser() automatically refreshes the session if the access
+  // token is expired but the refresh token is still valid. This is what
+  // keeps users logged in after closing and reopening the browser — the
+  // refresh token (stored in a persistent cookie with maxAge=1 year) is
+  // exchanged for a new access token, and the updated tokens are written
+  // back to cookies via the setAll callback above.
   const {
     data: { user },
   } = await supabase.auth.getUser()

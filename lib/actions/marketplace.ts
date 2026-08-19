@@ -117,6 +117,11 @@ export async function reviewListingAction(
   if (!gate.ok) gate = await requireSphereAction(listing.sphere_id, "marketplace.review")
   if (!gate.ok) return gate
 
+  // Server-side: a user must never moderate their own listing.
+  if (listing.seller_id === gate.member.userId) {
+    return { error: "You cannot review your own listing." }
+  }
+
   let adminPriceCents: number | null = null
   if (decision === "approve" && adminPriceRaw.trim()) {
     const p = Number.parseFloat(adminPriceRaw.trim())

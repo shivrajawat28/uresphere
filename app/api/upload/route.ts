@@ -52,8 +52,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
-    // Images are the common case; PDFs are allowed too (academic resources).
-    const isImage = ALLOWED_IMAGE_TYPES.has(file.type)
+    // Accept any image/* MIME type from the browser; PDFs are allowed too
+    // (academic resources). The real validation is done by magic-byte sniffing
+    // below, so we only reject obviously non-image/non-PDF types here.
+    const isImage = file.type.startsWith("image/") || file.type === ""
     const isPdf = file.type === "application/pdf"
     if (!isImage && !isPdf) {
       return NextResponse.json({ error: "Unsupported file type" }, { status: 400 })
