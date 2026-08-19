@@ -54,6 +54,17 @@ export function NotificationCenter({
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  // Unique channel name per component instance — the dashboard layout renders
+  // TWO NotificationCenter instances (mobile + desktop). If they share a
+  // channel name, Supabase returns the already-subscribed channel object on
+  // the second call, and the subsequent .on() throws:
+  //   "cannot add postgres_changes callbacks after subscribe()"
+  // useState with lazy initializer runs exactly once, avoiding the React
+  // purity lint rule and guaranteeing a stable ID across re-renders.
+  const [channelId] = useState(() => {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID().slice(0, 8)
+    return "fallback"
+  })
 
   // Subscribe to real-time notification changes. The channel must NOT depend
   // on `open` — tearing it down on every dropdown toggle causes missed UPDATE
@@ -61,20 +72,18 @@ export function NotificationCenter({
   useEffect(() => {
     if (!userId) return
     const supabase = createClient()
+    // All .on() handlers MUST be registered BEFORE .subscribe().
+    // Channel name must be unique per instance to avoid the two-instance
+    // collision described above.
     const channel = supabase
-      .channel(`notif-center-${userId}`)
+      .channel(`notif-center-${userId}-${channelId}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
         (payload) => {
           const n = payload.new as Notification
           if (!n.read) setUnread((c) => c + 1)
-          // Add to top of dropdown list if open.
-          setNotifications((prev) => {
-            // Only add if dropdown is currently open (read from ref-style state).
-            // We check the DOM or use a simple flag approach.
-            return [n, ...prev].slice(0, 20)
-          })
+          setNotifications((prev) => [n, ...prev].slice(0, 20))
         },
       )
       .on(
@@ -90,7 +99,7 @@ export function NotificationCenter({
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [userId])
+  }, [userId, channelId])
 
   // Close on outside click.
   useEffect(() => {
