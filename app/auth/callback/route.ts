@@ -6,36 +6,44 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code")
   const next = searchParams.get("next") ?? "/dashboard"
   const type = searchParams.get("type")
+  const errorDescription = searchParams.get("error_description")
+
+  // If Supabase returned an error (e.g. expired token, invalid redirect URL),
+  // show the error page with a helpful message.
+  if (errorDescription) {
+    return NextResponse.redirect(`${origin}/auth/error`)
+  }
 
   // Password recovery links from Supabase come as:
-  //   /auth/callback?code=...&type=recovery#access_token=...&refresh_token=...
-  // The hash fragment tokens must be processed client-side (browser only),
-  // so we redirect with the full original URL (including hash) preserved.
-  if (type === "recovery") {
-    if (code) {
-      const supabase = await createClient()
-      const { error } = await supabase.auth.exchangeCodeForSession(code)
-      if (!error) {
-        // The server-side session was established. Redirect to the
-        // reset-password page. The hash fragment is NOT sent to the server
-        // (it is a browser-only concept), so the client-side Supabase
-        // library will rely on the cookies set by exchangeCodeForSession.
-        return NextResponse.redirect(`${origin}/auth/reset-password`)
-      }
-    }
-
-    // If the code exchange failed (or there was no code), still redirect to
-    // the reset-password page — the client-side recovery handler will pick
-    // up the hash fragment tokens and establish the session.
-    return NextResponse.redirect(`${origin}/auth/reset-password`)
-  }
+  //   /auth/callback?code=...&type=recovery
+  // In newer Supabase versions, the `type` param may NOT be present in the
+  // redirect URL — only the PKCE code is passed. Handle both cases.
+  const isRecovery = type === "recovery"
 
   if (code) {
     const supabase = await createClient()
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
+      // For recovery: always go to the reset-password page.
+      // For other flows (signup, magic link): go to the next param or dashboard.
+      if (isRecovery || next === "/auth/reset-password") {
+        return NextResponse.redirect(`${origin}/auth/reset-password`)
+      }
       return NextResponse.redirect(`${origin}${next}`)
     }
+    // Code exchange failed — could be expired or already used.
+    // For recovery, still redirect to reset-password which shows a helpful
+    // "link expired" message. For other flows, go to the error page.
+    if (isRecovery || next === "/auth/reset-password") {
+      return NextResponse.redirect(`${origin}/auth/reset-password`)
+    }
+    return NextResponse.redirect(`${origin}/auth/error`)
+  }
+
+  // No code at all — if this was a recovery flow, send to reset-password
+  // (which handles the case gracefully). Otherwise, error page.
+  if (isRecovery || next === "/auth/reset-password") {
+    return NextResponse.redirect(`${origin}/auth/reset-password`)
   }
 
   return NextResponse.redirect(`${origin}/auth/error`)

@@ -17,6 +17,7 @@ import {
 } from "@/lib/actions/admin"
 import { verifyPromotionPaymentAction } from "@/lib/actions/platform"
 import { deleteMessageAction } from "@/lib/actions/chat"
+import { reviewListingAction } from "@/lib/actions/marketplace"
 import { adminDeleteGroupAction } from "@/lib/actions/groups"
 import { createClient } from "@/lib/supabase/client"
 import { deletedMessageLabel, mergeChatMessages, type ChatMessage, type DeletedByRole } from "@/lib/chat"
@@ -711,34 +712,12 @@ export function SphereAdmin({
               <Empty text="No marketplace listings in this Sphere." />
             ) : (
               listings.map((l) => (
-                <Card key={l.id} className="border-border/70 bg-card">
-                  <CardContent className="flex items-center gap-3 p-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-foreground">{l.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {l.category} ·{" "}
-                        {(l.price_cents / 100).toLocaleString("en-IN", {
-                          style: "currency",
-                          currency: "INR",
-                          maximumFractionDigits: 0,
-                        })}
-                      </p>
-                    </div>
-                    <Badge variant="outline" className="border-border/60 text-[10px] font-normal capitalize">
-                      {l.status}
-                    </Badge>
-                    {l.status !== "removed" && (
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        disabled={isPending}
-                        onClick={() => run(() => removeListingAction(l.id, []), "Listing removed")}
-                      >
-                        Remove
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
+                <ListingRow
+                  key={l.id}
+                  listing={l}
+                  isPending={isPending}
+                  startTransition={startTransition}
+                />
               ))
             )}
           </TabsContent>
@@ -1222,5 +1201,103 @@ function ReportActions({
         </Button>
       </div>
     </div>
+  )
+}
+
+function ListingRow({
+  listing,
+  isPending,
+  startTransition,
+}: {
+  listing: { id: string; title: string; price_cents: number; category: string; status: string; seller_id: string }
+  isPending: boolean
+  startTransition: (fn: () => void) => void
+}) {
+  const [price, setPrice] = useState("")
+  const [reason, setReason] = useState("")
+
+  function review(decision: "approve" | "reject") {
+    startTransition(async () => {
+      const result = await reviewListingAction(listing.id, decision, price, reason)
+      if (result.error) toast.error(result.error)
+      else toast.success(decision === "approve" ? "Listing approved" : "Listing rejected")
+    })
+  }
+
+  return (
+    <Card className="border-border/70 bg-card">
+      <CardContent className="p-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-foreground">{listing.title}</p>
+            <p className="text-xs text-muted-foreground">
+              {listing.category} · Requested {" "}
+              {(listing.price_cents / 100).toLocaleString("en-IN", {
+                style: "currency",
+                currency: "INR",
+                maximumFractionDigits: 0,
+              })}
+            </p>
+          </div>
+          <Badge variant="outline" className="border-border/60 text-[10px] font-normal capitalize">
+            {listing.status}
+          </Badge>
+        </div>
+        {listing.status === "pending" && (
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="space-y-1 sm:w-40">
+              <Label className="text-[11px]">Final price (₹)</Label>
+              <Input
+                type="number"
+                min="0"
+                step="1"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder={String(Math.round(listing.price_cents / 100))}
+              />
+            </div>
+            <div className="space-y-1 flex-1">
+              <Label className="text-[11px]">Rejection reason</Label>
+              <Input
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Why reject?"
+                maxLength={300}
+              />
+            </div>
+          </div>
+        )}
+        <div className="mt-2 flex flex-wrap gap-2">
+          {listing.status === "pending" && (
+            <>
+              <Button size="sm" disabled={isPending} onClick={() => review("approve")}>
+                Approve
+              </Button>
+              <Button size="sm" variant="destructive" disabled={isPending} onClick={() => review("reject")}>
+                Reject
+              </Button>
+            </>
+          )}
+          {listing.status !== "removed" && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={isPending}
+              onClick={() => {
+                if (confirm(`Remove "${listing.title}"?`)) {
+                  startTransition(async () => {
+                    const result = await removeListingAction(listing.id, [])
+                    if (result.error) toast.error(result.error)
+                    else toast.success("Listing removed")
+                  })
+                }
+              }}
+            >
+              Remove
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   )
 }
