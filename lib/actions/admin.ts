@@ -492,6 +492,9 @@ export async function createClubAction(formData: FormData): Promise<ActionResult
   const name = String(formData.get("name") ?? "").trim()
   const description = String(formData.get("description") ?? "").trim()
   const imageUrl = String(formData.get("imageUrl") ?? "").trim() || null
+  const category = String(formData.get("category") ?? "other").trim()
+  const tagline = String(formData.get("tagline") ?? "").trim()
+  const contactInfo = String(formData.get("contactInfo") ?? "").trim()
 
   if (!sphereId) return { error: "Missing Sphere." }
   if (name.length < 1 || name.length > 120) return { error: "Club name must be 1–120 characters." }
@@ -505,6 +508,9 @@ export async function createClubAction(formData: FormData): Promise<ActionResult
     description,
     president_id: null,
     logo_url: imageUrl,
+    category,
+    tagline,
+    contact_info: contactInfo,
     created_by: gate.member.userId,
   })
   if (error) return { error: "Couldn't create the club." }
@@ -522,6 +528,9 @@ export async function updateClubAction(formData: FormData): Promise<ActionResult
   const name = String(formData.get("name") ?? "").trim()
   const description = String(formData.get("description") ?? "").trim()
   const imageUrl = String(formData.get("imageUrl") ?? "").trim() || null
+  const category = String(formData.get("category") ?? "other").trim()
+  const tagline = String(formData.get("tagline") ?? "").trim()
+  const contactInfo = String(formData.get("contactInfo") ?? "").trim()
 
   if (!id) return { error: "Missing club." }
   if (name.length < 1 || name.length > 120) return { error: "Club name must be 1–120 characters." }
@@ -534,7 +543,7 @@ export async function updateClubAction(formData: FormData): Promise<ActionResult
 
   const { error } = await supabase
     .from("clubs")
-    .update({ name, description, logo_url: imageUrl })
+    .update({ name, description, logo_url: imageUrl, category, tagline, contact_info: contactInfo })
     .eq("id", id)
   if (error) return { error: "Couldn't update the club." }
 
@@ -578,6 +587,295 @@ export async function deleteClubAction(clubId: string): Promise<ActionResult> {
   if (error) return { error: "Couldn't delete the club." }
 
   await logAudit(supabase, gate.member.userId, club.sphere_id, "club_deleted", "club", clubId)
+  for (const p of spherePaths(club.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/clubs")
+  return { error: null }
+}
+
+// ---------------------------------------------------------------------------
+// Club Activities
+// ---------------------------------------------------------------------------
+
+export async function createClubActivityAction(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  const clubId = String(formData.get("clubId") ?? "")
+  const title = String(formData.get("title") ?? "").trim()
+  const description = String(formData.get("description") ?? "").trim()
+  const category = String(formData.get("category") ?? "other").trim()
+  const date = String(formData.get("date") ?? "") || null
+  const time = String(formData.get("time") ?? "") || null
+  const venue = String(formData.get("venue") ?? "").trim()
+  const organizer = String(formData.get("organizer") ?? "").trim()
+  const thumbnailUrl = String(formData.get("thumbnailUrl") ?? "").trim() || null
+
+  if (!clubId) return { error: "Missing club." }
+  if (title.length < 1 || title.length > 200) return { error: "Title must be 1–200 characters." }
+
+  const { data: club } = await supabase.from("clubs").select("id, sphere_id").eq("id", clubId).maybeSingle()
+  if (!club) return { error: "Club not found." }
+
+  const gate = await requireSphereAction(club.sphere_id, "clubs.update")
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("club_activities").insert({
+    club_id: clubId,
+    title,
+    description,
+    category,
+    event_date: date,
+    event_time: time,
+    venue,
+    organizer,
+    thumbnail_url: thumbnailUrl,
+    created_by: gate.member.userId,
+  })
+  if (error) return { error: "Couldn't create the activity." }
+
+  for (const p of spherePaths(club.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/clubs")
+  return { error: null }
+}
+
+export async function deleteClubActivityAction(activityId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { data: activity } = await supabase.from("club_activities").select("id, club_id, clubs(sphere_id)").eq("id", activityId).maybeSingle()
+  if (!activity) return { error: "Activity not found." }
+
+  const sphereId = Array.isArray(activity.clubs)
+    ? (activity.clubs[0] as { sphere_id?: string })?.sphere_id
+    : (activity.clubs as { sphere_id?: string })?.sphere_id
+  if (!sphereId) return { error: "Club not found." }
+
+  const gate = await requireSphereAction(sphereId, "clubs.update")
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("club_activities").delete().eq("id", activityId)
+  if (error) return { error: "Couldn't delete the activity." }
+
+  for (const p of spherePaths(sphereId)) revalidatePath(p)
+  revalidatePath("/dashboard/clubs")
+  return { error: null }
+}
+
+// ---------------------------------------------------------------------------
+// Club Events
+// ---------------------------------------------------------------------------
+
+export async function createClubEventAction(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  const clubId = String(formData.get("clubId") ?? "")
+  const title = String(formData.get("title") ?? "").trim()
+  const description = String(formData.get("description") ?? "").trim()
+  const date = String(formData.get("date") ?? "") || null
+  const time = String(formData.get("time") ?? "") || null
+  const venue = String(formData.get("venue") ?? "").trim()
+  const organizer = String(formData.get("organizer") ?? "").trim()
+  const contactName = String(formData.get("contactName") ?? "").trim()
+  const contactPhone = String(formData.get("contactPhone") ?? "").trim()
+  const contactEmail = String(formData.get("contactEmail") ?? "").trim()
+  const registrationUrl = String(formData.get("registrationUrl") ?? "").trim()
+  const registrationDeadline = String(formData.get("registrationDeadline") ?? "") || null
+  const thumbnailUrl = String(formData.get("thumbnailUrl") ?? "").trim() || null
+
+  if (!clubId) return { error: "Missing club." }
+  if (title.length < 1 || title.length > 200) return { error: "Title must be 1–200 characters." }
+
+  const { data: club } = await supabase.from("clubs").select("id, sphere_id").eq("id", clubId).maybeSingle()
+  if (!club) return { error: "Club not found." }
+
+  const gate = await requireSphereAction(club.sphere_id, "events.create")
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("club_events").insert({
+    club_id: clubId,
+    title,
+    description,
+    event_date: date,
+    event_time: time,
+    venue,
+    organizer,
+    contact_name: contactName,
+    contact_phone: contactPhone,
+    contact_email: contactEmail,
+    registration_url: registrationUrl,
+    registration_deadline: registrationDeadline,
+    thumbnail_url: thumbnailUrl,
+    created_by: gate.member.userId,
+  })
+  if (error) return { error: "Couldn't create the club event." }
+
+  for (const p of spherePaths(club.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/clubs")
+  return { error: null }
+}
+
+export async function deleteClubEventAction(eventId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { data: event } = await supabase.from("club_events").select("id, club_id, clubs(sphere_id)").eq("id", eventId).maybeSingle()
+  if (!event) return { error: "Event not found." }
+
+  const sphereId = Array.isArray(event.clubs)
+    ? (event.clubs[0] as { sphere_id?: string })?.sphere_id
+    : (event.clubs as { sphere_id?: string })?.sphere_id
+  if (!sphereId) return { error: "Club not found." }
+
+  const gate = await requireSphereAction(sphereId, "events.delete")
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("club_events").delete().eq("id", eventId)
+  if (error) return { error: "Couldn't delete the club event." }
+
+  for (const p of spherePaths(sphereId)) revalidatePath(p)
+  revalidatePath("/dashboard/clubs")
+  return { error: null }
+}
+
+// ---------------------------------------------------------------------------
+// Event / Club Event Registration
+// ---------------------------------------------------------------------------
+
+export async function registerForEventAction(eventId: string, formData: FormData): Promise<ActionResult> {
+  const member = await requireMember()
+  const supabase = await createClient()
+  const fullName = String(formData.get("fullName") ?? "").trim()
+  const phone = String(formData.get("phone") ?? "").trim()
+  const section = String(formData.get("section") ?? "").trim()
+  const branch = String(formData.get("branch") ?? "").trim()
+  const year = String(formData.get("year") ?? "").trim()
+
+  if (fullName.length < 2) return { error: "Please enter your full name." }
+  if (phone.length < 7) return { error: "Please enter a valid phone number." }
+
+  // Check if it's a college event or club event
+  const { data: collegeEvent } = await supabase.from("events").select("id, sphere_id").eq("id", eventId).maybeSingle()
+  if (collegeEvent) {
+    if (collegeEvent.sphere_id !== member.sphereId) return { error: "Event not found." }
+    const { error } = await supabase.from("event_registrations").upsert({
+      event_id: eventId,
+      user_id: member.userId,
+      full_name: fullName,
+      phone_number: phone,
+      section,
+      branch,
+      year,
+    }, { onConflict: "event_id,user_id" })
+    if (error) return { error: "Couldn't register. You may already be registered." }
+    revalidatePath("/dashboard/events")
+    return { error: null }
+  }
+
+  const { data: clubEvent } = await supabase.from("club_events").select("id, club_id, clubs(sphere_id)").eq("id", eventId).maybeSingle()
+  if (clubEvent) {
+    const sphereId = Array.isArray(clubEvent.clubs)
+      ? (clubEvent.clubs[0] as { sphere_id?: string })?.sphere_id
+      : (clubEvent.clubs as { sphere_id?: string })?.sphere_id
+    if (sphereId !== member.sphereId) return { error: "Event not found." }
+    const { error } = await supabase.from("club_event_registrations").upsert({
+      club_event_id: eventId,
+      user_id: member.userId,
+      full_name: fullName,
+      phone_number: phone,
+      section,
+      branch,
+      year,
+    }, { onConflict: "club_event_id,user_id" })
+    if (error) return { error: "Couldn't register. You may already be registered." }
+    revalidatePath("/dashboard/clubs")
+    return { error: null }
+  }
+
+  return { error: "Event not found." }
+}
+
+export async function cancelEventRegistrationAction(eventId: string): Promise<ActionResult> {
+  const member = await requireMember()
+  const supabase = await createClient()
+
+  // Try college event first
+  const { data: collegeEvent } = await supabase.from("events").select("id").eq("id", eventId).maybeSingle()
+  if (collegeEvent) {
+    await supabase.from("event_registrations").delete().eq("event_id", eventId).eq("user_id", member.userId)
+    revalidatePath("/dashboard/events")
+    return { error: null }
+  }
+
+  // Try club event
+  await supabase.from("club_event_registrations").delete().eq("club_event_id", eventId).eq("user_id", member.userId)
+  revalidatePath("/dashboard/clubs")
+  return { error: null }
+}
+
+// ---------------------------------------------------------------------------
+// Event Gallery Management
+// ---------------------------------------------------------------------------
+
+export async function addEventGalleryItemAction(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  const eventId = String(formData.get("eventId") ?? "")
+  const itemType = String(formData.get("itemType") ?? "photo")
+  const url = String(formData.get("url") ?? "").trim()
+  const title = String(formData.get("title") ?? "").trim()
+  const source = String(formData.get("source") ?? "college") // "college" | "club" | "activity"
+
+  if (!eventId) return { error: "Missing event." }
+  if (!url) return { error: "URL is required." }
+  if (!["photo", "link"].includes(itemType)) return { error: "Invalid item type." }
+
+  let table: string
+  let fkColumn: string
+  if (source === "activity") {
+    table = "club_activity_gallery"
+    fkColumn = "activity_id"
+  } else if (source === "club") {
+    table = "club_event_gallery"
+    fkColumn = "club_event_id"
+  } else {
+    table = "event_gallery"
+    fkColumn = "event_id"
+  }
+
+  const { error } = await supabase.from(table).insert({
+    [fkColumn]: eventId,
+    item_type: itemType,
+    url,
+    title,
+  })
+  if (error) return { error: "Couldn't add gallery item." }
+
+  revalidatePath("/dashboard/events")
+  revalidatePath("/dashboard/clubs")
+  return { error: null }
+}
+
+export async function deleteEventGalleryItemAction(itemId: string, source: "college" | "club" | "activity"): Promise<ActionResult> {
+  const supabase = await createClient()
+  const table = source === "activity" ? "club_activity_gallery" : source === "club" ? "club_event_gallery" : "event_gallery"
+  const { error } = await supabase.from(table).delete().eq("id", itemId)
+  if (error) return { error: "Couldn't delete gallery item." }
+
+  revalidatePath("/dashboard/events")
+  revalidatePath("/dashboard/clubs")
+  return { error: null }
+}
+
+// ---------------------------------------------------------------------------
+// Club Gallery Management
+// ---------------------------------------------------------------------------
+
+export async function addClubGalleryItemAction(clubId: string, url: string): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { data: club } = await supabase.from("clubs").select("id, sphere_id").eq("id", clubId).maybeSingle()
+  if (!club) return { error: "Club not found." }
+
+  const gate = await requireSphereAction(club.sphere_id, "clubs.update")
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("club_gallery").insert({
+    club_id: clubId,
+    url,
+  })
+  if (error) return { error: "Couldn't add gallery item." }
+
   for (const p of spherePaths(club.sphere_id)) revalidatePath(p)
   revalidatePath("/dashboard/clubs")
   return { error: null }
@@ -954,4 +1252,119 @@ export async function adminDeleteChatMessageAction(messageId: string): Promise<A
   for (const p of spherePaths(message.sphere_id)) revalidatePath(p)
   revalidatePath("/dashboard/chat")
   return { error: null }
+}
+
+// ---------------------------------------------------------------------------
+// Event Registrations — admin read
+// ---------------------------------------------------------------------------
+
+type RegistrationRow = {
+  id: string
+  full_name: string
+  phone_number: string
+  section: string
+  branch: string
+  year: string
+  created_at: string
+}
+
+export type EventRegistrationsResult = {
+  registrations: RegistrationRow[]
+  count: number
+  error: string | null
+}
+
+/**
+ * Fetches registrations for a college or club event. Only admins/club-admins
+ * may call this; enforced server-side.
+ */
+export async function getEventRegistrations(
+  eventId: string,
+  source: "college" | "club",
+): Promise<EventRegistrationsResult> {
+  await requireMember()
+  const supabase = await createClient()
+
+  if (source === "college") {
+    const { data: event } = await supabase
+      .from("events")
+      .select("id, sphere_id")
+      .eq("id", eventId)
+      .maybeSingle()
+    if (!event) return { registrations: [], count: 0, error: "Event not found." }
+
+    const gate = await requireSphereAction(event.sphere_id, "events.read")
+    if (!gate.ok) return { registrations: [], count: 0, error: gate.error }
+
+    const { data } = await supabase
+      .from("event_registrations")
+      .select("id, full_name, phone_number, section, branch, year, created_at")
+      .eq("event_id", eventId)
+      .order("created_at", { ascending: true })
+
+    return { registrations: data ?? [], count: (data ?? []).length, error: null }
+  }
+
+  // Club event
+  const { data: clubEvent } = await supabase
+    .from("club_events")
+    .select("id, club_id, clubs(sphere_id)")
+    .eq("id", eventId)
+    .maybeSingle()
+  if (!clubEvent) return { registrations: [], count: 0, error: "Event not found." }
+
+  const sphereId = Array.isArray(clubEvent.clubs)
+    ? (clubEvent.clubs[0] as { sphere_id?: string })?.sphere_id
+    : (clubEvent.clubs as { sphere_id?: string })?.sphere_id
+  if (!sphereId) return { registrations: [], count: 0, error: "Event not found." }
+
+  const gate = await requireSphereAction(sphereId, "events.read")
+  if (!gate.ok) return { registrations: [], count: 0, error: gate.error }
+
+  const { data } = await supabase
+    .from("club_event_registrations")
+    .select("id, full_name, phone_number, section, branch, year, created_at")
+    .eq("club_event_id", eventId)
+    .order("created_at", { ascending: true })
+
+  return { registrations: data ?? [], count: (data ?? []).length, error: null }
+}
+
+// ---------------------------------------------------------------------------
+// Event Gallery — fetch items
+// ---------------------------------------------------------------------------
+
+type GalleryItemRow = {
+  id: string
+  item_type: "photo" | "link"
+  url: string
+  title: string
+}
+
+export async function getEventGalleryItems(
+  eventId: string,
+  source: "college" | "club" | "activity",
+): Promise<{ items: GalleryItemRow[]; error: string | null }> {
+  let table: string
+  let fkColumn: string
+  if (source === "activity") {
+    table = "club_activity_gallery"
+    fkColumn = "activity_id"
+  } else if (source === "club") {
+    table = "club_event_gallery"
+    fkColumn = "club_event_id"
+  } else {
+    table = "event_gallery"
+    fkColumn = "event_id"
+  }
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from(table)
+    .select("id, item_type, url, title")
+    .eq(fkColumn, eventId)
+    .order("display_order", { ascending: true })
+
+  if (error) return { items: [], error: error.message }
+  return { items: (data ?? []) as GalleryItemRow[], error: null }
 }

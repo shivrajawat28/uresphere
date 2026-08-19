@@ -902,7 +902,25 @@ export async function assignRoleAction(formData: FormData): Promise<ActionResult
     }
   }
 
+  // club_admin requires a club_id in the scope to restrict management to one club.
+  let clubId: string | null = null
+  if (role === "club_admin") {
+    clubId = String(formData.get("clubId") ?? "").trim() || null
+    if (!clubId) return { error: "Club Admin requires selecting a club." }
+    // Verify the club exists in the target Sphere.
+    const { data: club } = await supabase
+      .from("clubs")
+      .select("id")
+      .eq("id", clubId)
+      .eq("sphere_id", sphereId)
+      .maybeSingle()
+    if (!club) return { error: "Club not found in this Sphere." }
+  }
+
   const scope: Record<string, unknown> = { permissions: effectivePermissions }
+  if (role === "club_admin" && clubId) {
+    scope.club_id = clubId
+  }
   if (role === "academic_manager" && sections && sections.length > 0) {
     // MERGE sections: if the user already has an academic_manager assignment,
     // combine the new sections with existing ones to avoid overwriting.

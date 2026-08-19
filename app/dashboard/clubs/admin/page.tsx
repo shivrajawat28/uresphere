@@ -15,18 +15,26 @@ export const metadata: Metadata = {
 export default async function ClubsAdminPage() {
   const member = await requireMember()
   const workspace = await loadAssignedSectionAdmin(member, "club_manager")
-  if (!workspace) redirect("/dashboard/clubs")
+  const clubAdminWorkspace = !workspace ? await loadAssignedSectionAdmin(member, "club_admin") : null
+  const activeWorkspace = workspace ?? clubAdminWorkspace
+  if (!activeWorkspace) redirect("/dashboard/clubs")
 
   const supabase = await createClient()
-  const { data: clubs } = await supabase
+  const isClubAdmin = activeWorkspace.role === "club_admin"
+
+  let query = supabase
     .from("clubs")
-    .select("id, name, description, logo_url, club_members(user_id)")
-    .eq("sphere_id", workspace.sphereId)
+    .select("id, name, description, logo_url, category, tagline, contact_info, club_members(user_id)")
+    .eq("sphere_id", activeWorkspace.sphereId)
     .order("created_at", { ascending: false })
     .limit(200)
 
-  // Resolve member handles for the member-management views (same-Sphere
-  // anonymous handles only — private profile fields never leave the server).
+  if (isClubAdmin && activeWorkspace.clubId) {
+    query = query.eq("id", activeWorkspace.clubId)
+  }
+
+  const { data: clubs } = await query
+
   const memberIds = Array.from(
     new Set((clubs ?? []).flatMap((c) => (Array.isArray(c.club_members) ? c.club_members.map((m) => m.user_id) : []))),
   )
@@ -35,17 +43,66 @@ export default async function ClubsAdminPage() {
     : { data: [] as { user_id: string; anonymous_handle: string }[] }
   const handleByUser = new Map((handles ?? []).map((h) => [h.user_id, h.anonymous_handle]))
 
+  // Fetch activities for all clubs
+  const clubIds = (clubs ?? []).map((c) => c.id)
+  const { data: activities } = clubIds.length
+    ? await supabase
+        .from("club_activities")
+        .select("id, title, description, category, event_date, venue, organizer, thumbnail_url, club_id")
+        .in("club_id", clubIds)
+        .order("created_at", { ascending: false })
+    : { data: [] }
+
+  // Fetch club events for all clubs
+  const { data: clubEvents } = clubIds.length
+    ? await supabase
+        .from("club_events")
+        .select("id, title, description, event_date, event_time, venue, organizer, contact_name, contact_phone, contact_email, registration_url, thumbnail_url, club_id")
+        .in("club_id", clubIds)
+        .order("event_date", { ascending: true, nullsFirst: true })
+    : { data: [] }
+
   return (
     <ClubsAdminClient
-      sphereId={workspace.sphereId}
-      sphereName={workspace.sphereName}
+      sphereId={activeWorkspace.sphereId}
+      sphereName={activeWorkspace.sphereName}
+      isClubAdmin={isClubAdmin}
       clubs={(clubs ?? []).map((c) => ({
         id: c.id,
         name: c.name,
         description: c.description ?? "",
         logo_url: c.logo_url,
+        category: c.category ?? "other",
+        tagline: c.tagline ?? "",
+        contact_info: c.contact_info ?? "",
         members: (Array.isArray(c.club_members) ? c.club_members : [])
           .map((m) => ({ userId: m.user_id, handle: handleByUser.get(m.user_id) ?? "Unknown" })),
+      }))}
+      activities={(activities ?? []).map((a) => ({
+        id: a.id,
+        title: a.title,
+        description: a.description ?? "",
+        category: a.category ?? "other",
+        event_date: a.event_date,
+        venue: a.venue ?? "",
+        organizer: a.organizer ?? "",
+        thumbnail_url: a.thumbnail_url,
+        club_id: a.club_id,
+      }))}
+      clubEvents={(clubEvents ?? []).map((e) => ({
+        id: e.id,
+        title: e.title,
+        description: e.description ?? "",
+        event_date: e.event_date,
+        event_time: e.event_time,
+        venue: e.venue ?? "",
+        organizer: e.organizer ?? "",
+        contact_name: e.contact_name ?? "",
+        contact_phone: e.contact_phone ?? "",
+        contact_email: e.contact_email ?? "",
+        registration_url: e.registration_url ?? "",
+        thumbnail_url: e.thumbnail_url,
+        club_id: e.club_id,
       }))}
     />
   )

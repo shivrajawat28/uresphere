@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react"
 import Image from "next/image"
 import { Loader2, Upload, X } from "lucide-react"
+import { upload } from "@vercel/blob/client"
 import {
   Dialog,
   DialogContent,
@@ -35,6 +36,8 @@ const CONDITIONS = [
   { value: "fair", label: "Fair" },
 ]
 
+const MAX_FILE_BYTES = 10 * 1024 * 1024 // 10 MB
+
 export function CreateListingDialog({
   open,
   onOpenChange,
@@ -44,6 +47,7 @@ export function CreateListingDialog({
 }) {
   const [images, setImages] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<string>("")
   const [isPending, startTransition] = useTransition()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -56,21 +60,63 @@ export function CreateListingDialog({
     }
 
     setUploading(true)
+    const uploaded: string[] = []
+
     try {
-      const uploaded: string[] = []
-      for (const file of files) {
-        const formData = new FormData()
-        formData.append("file", file)
-        const res = await fetch("/api/listings/upload", { method: "POST", body: formData })
-        const json = await res.json()
-        if (!res.ok) throw new Error(json.error ?? "Upload failed")
-        uploaded.push(json.url)
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        setUploadProgress(`Uploading ${i + 1} of ${files.length}…`)
+
+        // Client-side size validation.
+        if (file.size > MAX_FILE_BYTES) {
+          toast.error(
+            `"${file.name}" is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Please choose an image under 10 MB.`,
+          )
+          continue
+        }
+
+        // Build storage path matching the existing convention:
+        // listings/{userId}/{uuid}.{ext}
+        const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg"
+        const pathname = `listings/temp/${crypto.randomUUID()}.${ext}`
+
+        try {
+          const blob = await upload(pathname, file, {
+            access: "public",
+            handleUploadUrl: "/api/blob/handle-upload",
+            contentType: file.type || undefined,
+          })
+          uploaded.push(blob.url)
+        } catch (uploadError) {
+          const msg =
+            uploadError instanceof Error ? uploadError.message : String(uploadError)
+          if (msg.includes("Not authenticated")) {
+            toast.error("Please sign in to upload images.")
+          } else if (msg.includes("too large") || msg.includes("size") || msg.includes("413")) {
+            toast.error(
+              `"${file.name}" is too large. Please choose an image under 10 MB.`,
+            )
+          } else if (msg.includes("type") || msg.includes("Unsupported")) {
+            toast.error(`"${file.name}" is an unsupported image format.`)
+          } else {
+            toast.error(`Couldn't upload "${file.name}". Please try again.`)
+          }
+        }
       }
-      setImages((prev) => [...prev, ...uploaded])
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Upload failed")
+
+      if (uploaded.length > 0) {
+        setImages((prev) => [...prev, ...uploaded])
+        if (uploaded.length < files.length) {
+          toast.info(
+            `${uploaded.length} of ${files.length} images uploaded. Check file sizes.`,
+          )
+        }
+      } else if (files.length > 0) {
+        toast.error("No images were uploaded. Please check file sizes and try again.")
+      }
     } finally {
       setUploading(false)
+      setUploadProgress("")
       if (fileInputRef.current) fileInputRef.current.value = ""
     }
   }
@@ -80,6 +126,10 @@ export function CreateListingDialog({
   }
 
   function handleSubmit(formData: FormData) {
+    if (images.length === 0) {
+      toast.error("Please add at least one photo.")
+      return
+    }
     formData.set("imageUrls", JSON.stringify(images))
     startTransition(async () => {
       const result = await createListingAction(formData)
@@ -160,7 +210,7 @@ export function CreateListingDialog({
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label>Photos</Label>
+            <Label>Photos (max 6, 10 MB each)</Label>
             <div className="flex flex-wrap gap-2">
               {images.map((url) => (
                 <div key={url} className="relative h-20 w-20 overflow-hidden rounded-md border border-border">
@@ -180,10 +230,10 @@ export function CreateListingDialog({
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading}
-                  className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-md border border-dashed border-border text-muted-foreground hover:border-primary hover:text-primary"
+                  className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-md border border-dashed border-border text-muted-foreground hover:border-primary hover:text-primary disabled:opacity-50"
                 >
                   {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                  <span className="text-[10px]">Add</span>
+                  <span className="text-[10px]">{uploadProgress || "Add"}</span>
                 </button>
               )}
             </div>
@@ -195,6 +245,9 @@ export function CreateListingDialog({
               className="hidden"
               onChange={handleFileChange}
             />
+            <p className="text-[11px] text-muted-foreground">
+              Supports JPG, PNG, WebP, GIF, HEIC/HEIF. Max 10 MB per image.
+            </p>
           </div>
 
           <DialogFooter>

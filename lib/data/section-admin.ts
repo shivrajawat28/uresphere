@@ -11,6 +11,7 @@ export const SECTION_ADMIN_ROLES = [
   "event_manager",
   "social_moderator",
   "club_manager",
+  "club_admin",
 ] as const
 
 export type SectionAdminRole = (typeof SECTION_ADMIN_ROLES)[number]
@@ -20,6 +21,7 @@ export type SectionAdminWorkspace = {
   sphereId: string
   sphereName: string
   permissions: string[]
+  clubId?: string
 }
 
 /**
@@ -47,7 +49,9 @@ export async function loadAssignedSectionAdmin(
     ? (data.scope.permissions as string[])
     : []
 
-  return { role, sphereId: member.sphereId, sphereName: member.sphereName, permissions }
+  const clubId = typeof data.scope?.club_id === "string" ? (data.scope.club_id as string) : undefined
+
+  return { role, sphereId: member.sphereId, sphereName: member.sphereName, permissions, clubId }
 }
 
 /** All section-admin roles the member holds (drives dashboard nav entries). */

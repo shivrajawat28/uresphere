@@ -3,6 +3,7 @@
 import { useRef, useState } from "react"
 import Image from "next/image"
 import { FileText, Link2, Loader2, Upload, X } from "lucide-react"
+import { upload } from "@vercel/blob/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
@@ -17,8 +18,14 @@ function isPdfUrl(url: string): boolean {
 /**
  * Shared device-upload control used everywhere an image/PDF is required.
  *
- * - "Upload from device" posts the file to `endpoint` (server-side MIME +
- *   size + magic-byte validation, same-origin CSRF check).
+ * For image uploads, uses Vercel Blob client-side upload (direct browser →
+ * Vercel Blob) to bypass the Vercel serverless function body-size limit that
+ * caused HTTP 413 errors on production. Files never pass through a Next.js
+ * API route body — only a short-lived token request hits the server.
+ *
+ * - "Upload from device" uses `@vercel/blob/client` `upload()` which
+ *   fetches a scoped token from `/api/blob/handle-upload`, then uploads
+ *   directly to Vercel Blob storage.
  * - Keeps the existing URL input for admins who prefer to paste a link.
  * - Renders responsive previews: images keep their aspect ratio with
  *   `object-contain` (never stretched/cropped); PDFs show a link card
@@ -27,7 +34,7 @@ function isPdfUrl(url: string): boolean {
  * `value` is a single URL string, or — with `multiple` — an array of URLs.
  */
 export function FileUpload({
-  endpoint = "/api/upload",
+  endpoint = "/api/blob/handle-upload",
   accept = "image",
   multiple = false,
   value,
@@ -72,18 +79,40 @@ export function FileUpload({
     try {
       const uploaded: string[] = []
       for (const file of files) {
-        const formData = new FormData()
-        formData.append("file", file)
-        const res = await fetch(endpoint, { method: "POST", body: formData })
-        const json = (await res.json().catch(() => ({}))) as { url?: string; error?: string }
-        if (!res.ok) throw new Error(json.error ?? "Upload failed")
-        if (!json.url) throw new Error("Upload failed")
-        uploaded.push(json.url)
+        // Validate size client-side first (10 MB limit).
+        if (file.size > 10 * 1024 * 1024) {
+          toast.error(`"${file.name}" is too large. Please choose an image under 10 MB.`)
+          continue
+        }
+
+        // Build a storage path matching the server convention:
+        // uploads/{userId}/{uuid}.{ext}
+        const ext = file.name.split(".").pop() ?? "jpg"
+        const pathname = `uploads/temp/${crypto.randomUUID()}.${ext}`
+
+        try {
+          const blob = await upload(pathname, file, {
+            access: "public",
+            handleUploadUrl: endpoint,
+            contentType: file.type || undefined,
+          })
+          uploaded.push(blob.url)
+        } catch (uploadError) {
+          const msg =
+            uploadError instanceof Error ? uploadError.message : "Upload failed"
+          if (msg.includes("Not authenticated")) {
+            toast.error("Please sign in to upload images.")
+          } else if (msg.includes("too large") || msg.includes("size")) {
+            toast.error(`"${file.name}" is too large. Please choose an image under 10 MB.`)
+          } else {
+            toast.error(`Couldn't upload "${file.name}". Please try again.`)
+          }
+        }
       }
-      const next = multiple ? [...current, ...uploaded] : uploaded[0]
-      onChange(next as string | string[])
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Upload failed")
+      if (uploaded.length > 0) {
+        const next = multiple ? [...current, ...uploaded] : uploaded[0]
+        onChange(next as string | string[])
+      }
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ""

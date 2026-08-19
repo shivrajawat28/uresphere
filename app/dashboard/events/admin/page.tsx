@@ -20,10 +20,12 @@ export default async function EventsAdminPage() {
   const supabase = await createClient()
   const { data: events } = await supabase
     .from("events")
-    .select("id, title, description, event_date, event_time, venue, organizer, image_url")
+    .select("id, title, description, event_date, event_time, venue, organizer, image_url, contact_name, contact_phone, contact_email, registration_url, registration_deadline")
     .eq("sphere_id", workspace.sphereId)
-    .order("event_date", { ascending: false })
+    .order("event_date", { ascending: false, nullsFirst: false })
     .limit(200)
+
+  const today = new Date().toISOString().slice(0, 10)
 
   return (
     <EventsAdminClient
@@ -38,6 +40,12 @@ export default async function EventsAdminPage() {
         venue: e.venue ?? "",
         organizer: e.organizer ?? "",
         image_url: e.image_url,
+        contact_name: e.contact_name ?? "",
+        contact_phone: e.contact_phone ?? "",
+        contact_email: e.contact_email ?? "",
+        registration_url: e.registration_url ?? "",
+        registration_deadline: e.registration_deadline ?? null,
+        status: !e.event_date ? "coming_soon" as const : e.event_date >= today ? "upcoming" as const : "past" as const,
       }))}
     />
   )

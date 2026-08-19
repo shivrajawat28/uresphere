@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (file.size > MAX_FILE_BYTES) {
-      return NextResponse.json({ error: "File too large (max 5MB)" }, { status: 400 })
+      return NextResponse.json({ error: "Image is too large. Please choose an image under 10 MB." }, { status: 400 })
     }
 
     // Never trust the client-supplied Content-Type alone — verify the bytes
@@ -61,10 +61,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "File contents don't match a supported image type" }, { status: 400 })
     }
 
+    // Allow admin-provided paths for backward compat, otherwise generate a safe path.
+    const clientPathname = formData.get("pathname") as string | null
     const ext = detectedType.split("/")[1] ?? "jpg"
-    const pathname = `listings/${userData.user.id}/${crypto.randomUUID()}.${ext}`
+    const safePathname = clientPathname && clientPathname.startsWith(`listings/${userData.user.id}/`)
+      ? clientPathname
+      : `listings/${userData.user.id}/${crypto.randomUUID()}.${ext}`
 
-    const blob = await put(pathname, file, {
+    const blob = await put(safePathname, file, {
       access: "public",
       contentType: detectedType,
     })
