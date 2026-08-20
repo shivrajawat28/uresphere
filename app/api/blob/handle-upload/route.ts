@@ -16,33 +16,43 @@ const ALLOWED_CONTENT_TYPES = [
 ]
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const body = await request.json()
+  try {
+    const body = await request.json()
 
-  const response = await handleUpload({
-    request,
-    body,
-    onBeforeGenerateToken: async (pathname: string) => {
-      // Verify the user is authenticated before issuing a client token.
-      const supabase = await createClient()
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser()
+    const response = await handleUpload({
+      request,
+      body,
+      onBeforeGenerateToken: async (pathname: string) => {
+        // Verify the user is authenticated before issuing a client token.
+        const supabase = await createClient()
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser()
 
-      if (authError || !user) {
-        throw new Error("Not authenticated")
-      }
+        if (authError || !user) {
+          throw new Error("Not authenticated")
+        }
 
-      // Verify active sphere membership.
-      const { data: membership } = await supabase
-        .from("user_spheres")
-        .select("sphere_id")
-        .eq("user_id", user.id)
-        .eq("membership_status", "active")
-        .maybeSingle()
-      if (!membership) {
-        throw new Error("Not a member of a Sphere")
-      }
+        // Check if the user is a super admin
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .maybeSingle()
+
+        // Verify active sphere membership (unless super admin, who has no sphere membership).
+        if (profile?.role !== "super_admin") {
+          const { data: membership } = await supabase
+            .from("user_spheres")
+            .select("sphere_id")
+            .eq("user_id", user.id)
+            .eq("membership_status", "active")
+            .maybeSingle()
+          if (!membership) {
+            throw new Error("Not a member of a Sphere")
+          }
+        }
 
       // Client uploads use paths like listings/temp/{uuid}.{ext} or
       // uploads/temp/{uuid}.{ext}. The user is already authenticated and
@@ -70,8 +80,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     },
   })
 
-  // handleUpload returns a Response-compatible object.
-  return NextResponse.json(response, {
-    status: response.type === "blob.generate-client-token" ? 200 : 200,
-  })
+    // handleUpload returns a Response-compatible object.
+    return NextResponse.json(response, {
+      status: response.type === "blob.generate-client-token" ? 200 : 200,
+    })
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Unknown error" },
+      { status: 400 }
+    )
+  }
 }
