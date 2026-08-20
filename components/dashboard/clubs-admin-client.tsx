@@ -65,6 +65,7 @@ export function ClubsAdminClient({
   isClubAdmin = false,
   activities = [],
   clubEvents = [],
+  initialExpandedClub,
 }: {
   sphereId: string
   sphereName: string
@@ -72,11 +73,12 @@ export function ClubsAdminClient({
   isClubAdmin?: boolean
   activities?: ActivityRow[]
   clubEvents?: ClubEventRow[]
+  initialExpandedClub?: string
 }) {
   const [isPending, startTransition] = useTransition()
   const [showCreate, setShowCreate] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [expandedClub, setExpandedClub] = useState<string | null>(null)
+  const [expandedClub, setExpandedClub] = useState<string | null>(initialExpandedClub ?? null)
   const [showAddActivity, setShowAddActivity] = useState(false)
   const [showAddEvent, setShowAddEvent] = useState(false)
   const [galleryTarget, setGalleryTarget] = useState<{ eventId: string; eventTitle: string; source: "club" | "activity" } | null>(null)

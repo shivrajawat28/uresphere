@@ -763,7 +763,7 @@ export function SphereAdmin({
           <TabsContent value="clubs" className="space-y-4">
             <div className="flex flex-wrap items-center gap-3">
               <CreateClubForm sphereId={sphereId} isPending={isPending} />
-              <Link href="/dashboard/clubs/admin">
+              <Link href={`/dashboard/clubs/admin?sphereId=${sphereId}`}>
                 <Button size="sm" variant="default" className="gap-1.5">
                   <ExternalLink className="size-3" aria-hidden="true" />
                   Full Club Management
@@ -793,7 +793,7 @@ export function SphereAdmin({
                       <Badge variant="secondary" className="text-[10px] mt-0.5">{c.category}</Badge>
                     </div>
                     <div className="flex shrink-0 gap-1.5">
-                      <Link href="/dashboard/clubs/admin">
+                      <Link href={`/dashboard/clubs/admin?sphereId=${sphereId}&clubId=${c.id}`}>
                         <Button size="sm" variant="outline">Manage</Button>
                       </Link>
                       <Button

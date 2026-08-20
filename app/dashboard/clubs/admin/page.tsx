@@ -12,7 +12,10 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 }
 
-export default async function ClubsAdminPage() {
+export default async function ClubsAdminPage(
+  props: { searchParams: Promise<{ sphereId?: string; clubId?: string }> }
+) {
+  const searchParams = await props.searchParams
   const member = await requireMember()
   const workspace = await loadAssignedSectionAdmin(member, "club_manager")
   const clubAdminWorkspace = !workspace ? await loadAssignedSectionAdmin(member, "club_admin") : null
@@ -21,11 +24,19 @@ export default async function ClubsAdminPage() {
   // Super-admin / admin users don't need a role_assignments row — they have
   // implicit full access. Build a synthetic workspace so the rest of the page
   // works unchanged.
-  if (!activeWorkspace && (member.role === "super_admin" || member.role === "admin") && member.sphereId) {
+  const targetSphereId = searchParams.sphereId ?? member.sphereId
+  if (!activeWorkspace && (member.role === "super_admin" || member.role === "admin") && targetSphereId) {
+    let targetSphereName = member.sphereName
+    if (targetSphereId !== member.sphereId) {
+      const supabase = await createClient()
+      const { data: s } = await supabase.from("spheres").select("name").eq("id", targetSphereId).maybeSingle()
+      if (s) targetSphereName = s.name
+    }
+
     activeWorkspace = {
       role: "club_manager" as const,
-      sphereId: member.sphereId,
-      sphereName: member.sphereName,
+      sphereId: targetSphereId,
+      sphereName: targetSphereName,
       permissions: ["clubs.read", "clubs.create", "clubs.update", "clubs.delete"],
     }
   }
@@ -117,6 +128,7 @@ export default async function ClubsAdminPage() {
         thumbnail_url: e.thumbnail_url,
         club_id: e.club_id,
       }))}
+      initialExpandedClub={searchParams.clubId}
     />
   )
 }
