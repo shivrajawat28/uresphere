@@ -16,7 +16,20 @@ export default async function ClubsAdminPage() {
   const member = await requireMember()
   const workspace = await loadAssignedSectionAdmin(member, "club_manager")
   const clubAdminWorkspace = !workspace ? await loadAssignedSectionAdmin(member, "club_admin") : null
-  const activeWorkspace = workspace ?? clubAdminWorkspace
+  let activeWorkspace = workspace ?? clubAdminWorkspace
+
+  // Super-admin / admin users don't need a role_assignments row — they have
+  // implicit full access. Build a synthetic workspace so the rest of the page
+  // works unchanged.
+  if (!activeWorkspace && (member.role === "super_admin" || member.role === "admin") && member.sphereId) {
+    activeWorkspace = {
+      role: "club_manager" as const,
+      sphereId: member.sphereId,
+      sphereName: member.sphereName,
+      permissions: ["clubs.read", "clubs.create", "clubs.update", "clubs.delete"],
+    }
+  }
+
   if (!activeWorkspace) redirect("/dashboard/clubs")
 
   const supabase = await createClient()

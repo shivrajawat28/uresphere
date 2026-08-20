@@ -30,7 +30,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { toast } from "sonner"
-import { Search, ArrowLeft, Users, ShieldCheck, Plus, X, Eye } from "lucide-react"
+import { Search, ArrowLeft, Users, ShieldCheck, Plus, X, Eye, ExternalLink } from "lucide-react"
+import { FileUpload } from "@/components/ui/file-upload"
 import { GroupInspectionDialog } from "@/components/admin/group-inspection-dialog"
 import { OrdersSection, ShopProductsSection } from "../../platform-sections"
 
@@ -75,7 +76,7 @@ type PromotionRow = {
 }
 type ListingRow = { id: string; title: string; price_cents: number; category: string; status: string; seller_id: string }
 type EventRow = { id: string; title: string; event_date: string; event_time: string | null; venue: string; organizer: string }
-type ClubRow = { id: string; name: string; description: string; logo_url: string | null }
+type ClubRow = { id: string; name: string; description: string; logo_url: string | null; category: string }
 type SubjectRow = { id: string; name: string; code: string; degree: string; year: string; branch: string }
 type ResourceRow = { id: string; title: string; type: string }
 type OrderRow = {
@@ -760,25 +761,50 @@ export function SphereAdmin({
         {/* Clubs */}
         {can("clubs") && (
           <TabsContent value="clubs" className="space-y-4">
-            <CreateClubForm sphereId={sphereId} isPending={isPending} />
+            <div className="flex flex-wrap items-center gap-3">
+              <CreateClubForm sphereId={sphereId} isPending={isPending} />
+              <Link href="/dashboard/clubs/admin">
+                <Button size="sm" variant="default" className="gap-1.5">
+                  <ExternalLink className="size-3" aria-hidden="true" />
+                  Full Club Management
+                </Button>
+              </Link>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Use <strong>Full Club Management</strong> to manage activities, events, galleries, and registrations for each club.
+            </p>
             {clubs.length === 0 ? (
               <Empty text="No clubs in this Sphere." />
             ) : (
               clubs.map((c) => (
                 <Card key={c.id} className="border-border/70 bg-card">
                   <CardContent className="flex items-center gap-3 p-3">
+                    {c.logo_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={c.logo_url} alt={c.name} className="size-10 rounded-lg border border-border/60 object-cover shrink-0" />
+                    ) : (
+                      <div className="flex size-10 items-center justify-center rounded-lg border border-primary/25 bg-primary/8 shrink-0">
+                        <Users className="size-4 text-primary" />
+                      </div>
+                    )}
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-foreground">{c.name}</p>
                       {c.description && <p className="truncate text-xs text-muted-foreground">{c.description}</p>}
+                      <Badge variant="secondary" className="text-[10px] mt-0.5">{c.category}</Badge>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      disabled={isPending}
-                      onClick={() => run(() => deleteClubAction(c.id), "Club deleted")}
-                    >
-                      Delete
-                    </Button>
+                    <div className="flex shrink-0 gap-1.5">
+                      <Link href="/dashboard/clubs/admin">
+                        <Button size="sm" variant="outline">Manage</Button>
+                      </Link>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={isPending}
+                        onClick={() => run(() => deleteClubAction(c.id), "Club deleted")}
+                      >
+                        Delete
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               ))
@@ -990,9 +1016,18 @@ function CreateEventForm({ sphereId, isPending }: { sphereId: string; isPending:
   )
 }
 
+const CLUB_CATEGORIES = [
+  { value: "coding", label: "Coding" }, { value: "robotics", label: "Robotics" },
+  { value: "ai_ml", label: "AI/ML" }, { value: "cultural", label: "Cultural" },
+  { value: "sports", label: "Sports" }, { value: "entrepreneurship", label: "Entrepreneurship" },
+  { value: "literary", label: "Literary" }, { value: "photography", label: "Photography" },
+  { value: "design", label: "Design" }, { value: "other", label: "Other" },
+]
+
 function CreateClubForm({ sphereId, isPending }: { sphereId: string; isPending: boolean }) {
   const [open, setOpen] = useState(false)
   const [busy, startTransition] = useTransition()
+  const [logo, setLogo] = useState("")
   return (
     <div className="space-y-2">
       <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setOpen((v) => !v)}>
@@ -1005,12 +1040,14 @@ function CreateClubForm({ sphereId, isPending }: { sphereId: string; isPending: 
             e.preventDefault()
             const fd = new FormData(e.currentTarget)
             fd.set("sphereId", sphereId)
+            fd.set("imageUrl", logo)
             startTransition(async () => {
               const r = await createClubAction(fd)
               if (r.error) toast.error(r.error)
               else {
                 toast.success("Club created")
                 setOpen(false)
+                setLogo("")
               }
             })
           }}
@@ -1020,9 +1057,23 @@ function CreateClubForm({ sphereId, isPending }: { sphereId: string; isPending: 
             <Label htmlFor="clName">Club name</Label>
             <Input id="clName" name="name" required maxLength={120} placeholder="Robotics Club" />
           </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="clCategory">Category</Label>
+            <select id="clCategory" name="category" defaultValue="other" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm">
+              {CLUB_CATEGORIES.map((c) => (<option key={c.value} value={c.value}>{c.label}</option>))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="clTagline">Tagline (optional)</Label>
+            <Input id="clTagline" name="tagline" maxLength={200} placeholder="Building the future" />
+          </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="clDesc">Description (optional)</Label>
             <Textarea id="clDesc" name="description" rows={2} />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>Logo / Thumbnail (optional)</Label>
+            <FileUpload value={logo} onChange={(v) => setLogo(typeof v === "string" ? v : (v[0] ?? ""))} label="Club logo" />
           </div>
           <div className="flex gap-2 sm:col-span-2">
             <Button type="submit" size="sm" disabled={busy || isPending}>

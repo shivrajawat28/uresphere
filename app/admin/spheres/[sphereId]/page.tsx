@@ -87,7 +87,7 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
       .limit(100),
     supabase
       .from("clubs")
-      .select("id, name, description, logo_url")
+      .select("id, name, description, logo_url, category")
       .eq("sphere_id", sphereId)
       .order("created_at", { ascending: false })
       .limit(100),
@@ -288,6 +288,7 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
         name: c.name,
         description: c.description,
         logo_url: c.logo_url,
+        category: c.category ?? "other",
       }))}
       subjects={(subjectsResult.data ?? []).map((s) => ({
         id: s.id,

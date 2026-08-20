@@ -34,7 +34,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     promotions: sectionRoles.includes("promotion_moderator"),
     events: sectionRoles.includes("event_manager"),
     social: sectionRoles.includes("social_moderator"),
-    clubs: sectionRoles.includes("club_manager") || sectionRoles.includes("club_admin"),
+    clubs: sectionRoles.includes("club_manager") || sectionRoles.includes("club_admin") || member.role === "super_admin" || member.role === "admin",
     globalListings: Boolean(listingManager) || member.role === "super_admin",
   }
 
