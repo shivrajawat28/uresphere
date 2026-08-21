@@ -856,7 +856,7 @@ const SHOP_CATEGORY_LABELS: Record<string, string> = {
   other: "Other",
 }
 
-const SHOP_AVAILABILITY = ["in_stock", "low_stock", "out_of_stock"] as const
+const SHOP_AVAILABILITY = ["in_stock", "out_of_stock"] as const
 
 export function ShopProductsSection({ sphereId, products }: { sphereId: string; products: ShopProductRow[] }) {
   const [isPending, startTransition] = useTransition()
@@ -963,6 +963,7 @@ export function ShopProductsSection({ sphereId, products }: { sphereId: string; 
               </button>
             </div>
             <form action={submit} className="space-y-3">
+              <input type="hidden" name="sphereId" value={sphereId} />
               <div className="space-y-1.5">
                 <Label htmlFor="spShopName">Shop name</Label>
                 <Input id="spShopName" name="shopName" required maxLength={120} defaultValue={editing?.shop_name ?? ""} placeholder="e.g. CampusKart" />
