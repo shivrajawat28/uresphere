@@ -8,7 +8,7 @@ import {
 } from "@/lib/actions/notifications"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "sonner"
-import { BellRing, MessageCircle, Users, Loader2 } from "lucide-react"
+import { BellRing, Users, Loader2 } from "lucide-react"
 
 export function NotificationSettings() {
   const [prefs, setPrefs] = useState<NotificationPreferences>({
@@ -64,14 +64,6 @@ export function NotificationSettings() {
           description="Receive push notifications in your browser for important updates"
           enabled={prefs.pushEnabled}
           onChange={(v) => updatePref("pushEnabled", v)}
-          disabled={isPending}
-        />
-        <ToggleRow
-          icon={<MessageCircle className="size-4" />}
-          label="Direct chat notifications"
-          description="Get notified when someone sends you a message in Sphere Chat"
-          enabled={prefs.chatNotifications}
-          onChange={(v) => updatePref("chatNotifications", v)}
           disabled={isPending}
         />
         <ToggleRow

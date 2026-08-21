@@ -39,7 +39,7 @@ export function SiteNav() {
             <Link href="/auth/login">Sign in</Link>
           </Button>
           <Button asChild size="sm">
-            <Link href="/auth/sign-up">Join your Sphere</Link>
+            <Link href="/auth/login">Join your Sphere</Link>
           </Button>
         </div>
 
@@ -74,7 +74,7 @@ export function SiteNav() {
                 <Link href="/auth/login">Sign in</Link>
               </Button>
               <Button asChild size="sm">
-                <Link href="/auth/sign-up">Join your Sphere</Link>
+                <Link href="/auth/login">Join your Sphere</Link>
               </Button>
             </div>
           </nav>

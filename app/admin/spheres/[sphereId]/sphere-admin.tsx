@@ -727,7 +727,18 @@ export function SphereAdmin({
         {/* Events */}
         {can("events") && (
           <TabsContent value="events" className="space-y-4">
-            <CreateEventForm sphereId={sphereId} isPending={isPending} />
+            <div className="flex flex-wrap items-center gap-3">
+              <CreateEventForm sphereId={sphereId} isPending={isPending} />
+              <Link href={`/dashboard/events/admin?sphereId=${sphereId}`}>
+                <Button size="sm" variant="default" className="gap-1.5">
+                  <ExternalLink className="size-3" aria-hidden="true" />
+                  Full Event Management
+                </Button>
+              </Link>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Use <strong>Full Event Management</strong> to manage upcoming, past, and coming soon events, alongside galleries and registrations.
+            </p>
             {events.length === 0 ? (
               <Empty text="No events in this Sphere." />
             ) : (

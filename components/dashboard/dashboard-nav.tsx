@@ -245,7 +245,17 @@ export function DashboardNav({
         <Link href="/dashboard" aria-label="UreSphere home" className="flex items-center gap-2">
           <UreSphereLogo className="h-5" wordmark wordmarkClassName="text-base" />
         </Link>
-        <ThemeToggle />
+        <div className="flex items-center gap-3">
+          <Link href="/dashboard/notifications" className="relative text-muted-foreground hover:text-foreground">
+            <Bell className="size-5" />
+            {unread > 0 && (
+              <span className="absolute -right-1.5 -top-1.5 inline-flex size-4 items-center justify-center rounded-full bg-primary text-[9px] font-semibold text-primary-foreground">
+                {unread > 99 ? "99+" : unread}
+              </span>
+            )}
+          </Link>
+          <ThemeToggle />
+        </div>
       </div>
 
       {/* Desktop sidebar */}

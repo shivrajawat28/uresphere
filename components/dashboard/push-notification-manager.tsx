@@ -46,7 +46,7 @@ export function PushNotificationManager() {
   if (permissionState !== "default" || !showPrompt) return null
 
   return (
-    <div className="fixed bottom-20 left-4 right-4 z-50 mx-auto max-w-md rounded-xl border border-border bg-card p-4 shadow-2xl md:bottom-8">
+    <div className="fixed top-20 left-4 right-4 z-50 mx-auto max-w-md rounded-xl border border-border bg-card p-4 shadow-2xl md:top-auto md:bottom-8">
       <div className="flex flex-col gap-3">
         <div>
           <p className="font-serif text-sm font-medium text-foreground">

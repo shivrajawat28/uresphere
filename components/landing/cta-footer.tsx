@@ -13,7 +13,7 @@ export function CtaFooter() {
           </h2>
           <p className="mb-8 text-base text-muted-foreground">Your campus community is waiting. Join in minutes. Stay private.</p>
           <Button asChild size="lg" className="gap-2 px-6">
-            <Link href="/auth/sign-up">
+            <Link href="/auth/login">
               Enter your Sphere
               <ArrowRight className="size-4" />
             </Link>

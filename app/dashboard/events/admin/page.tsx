@@ -12,9 +12,33 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 }
 
-export default async function EventsAdminPage() {
+export default async function EventsAdminPage(
+  props: { searchParams: Promise<{ sphereId?: string }> }
+) {
+  const searchParams = await props.searchParams
   const member = await requireMember()
-  const workspace = await loadAssignedSectionAdmin(member, "event_manager")
+  let workspace = await loadAssignedSectionAdmin(member, "event_manager")
+
+  // Super-admin / admin users don't need a role_assignments row — they have
+  // implicit full access. Build a synthetic workspace so the rest of the page
+  // works unchanged.
+  const targetSphereId = searchParams.sphereId ?? member.sphereId
+  if (!workspace && (member.role === "super_admin" || member.role === "admin") && targetSphereId) {
+    let targetSphereName = member.sphereName
+    if (targetSphereId !== member.sphereId) {
+      const supabase = await createClient()
+      const { data: s } = await supabase.from("spheres").select("name").eq("id", targetSphereId).maybeSingle()
+      if (s) targetSphereName = s.name
+    }
+
+    workspace = {
+      role: "event_manager" as const,
+      sphereId: targetSphereId,
+      sphereName: targetSphereName,
+      permissions: ["events.read", "events.create", "events.update", "events.delete"],
+    }
+  }
+
   if (!workspace) redirect("/dashboard/events")
 
   const supabase = await createClient()

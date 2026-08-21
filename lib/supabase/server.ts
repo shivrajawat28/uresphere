@@ -1,7 +1,6 @@
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
-const ONE_YEAR = 60 * 60 * 24 * 365
 
 /**
  * Especially important if using Fluid compute: Don't put this client in a
@@ -12,15 +11,7 @@ export async function createClient() {
   const cookieStore = await cookies()
 
   return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-    cookieOptions: {
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: ONE_YEAR,
-      // Explicit path ensures the auth cookies are read consistently
-      // across all routes, which is critical for session persistence
-      // when the user returns after closing the browser.
-      path: "/",
-    },
+
     cookies: {
       getAll() {
         return cookieStore.getAll()

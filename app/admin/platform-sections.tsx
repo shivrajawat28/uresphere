@@ -527,6 +527,7 @@ function PlanForm({
 export function TeamSection({ team }: { team: PlatformData["team"] }) {
   const [isPending, startTransition] = useTransition()
   const [open, setOpen] = useState(false)
+  const [photoUrls, setPhotoUrls] = useState<string[]>([])
 
   function run(action: () => Promise<{ error: string | null }>, success: string) {
     startTransition(async () => {
@@ -540,7 +541,10 @@ export function TeamSection({ team }: { team: PlatformData["team"] }) {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">Team members shown on the public About page.</p>
-        <Button size="sm" onClick={() => setOpen(true)}>
+        <Button size="sm" onClick={() => {
+          setPhotoUrls([])
+          setOpen(true)
+        }}>
           Add member
         </Button>
       </div>
@@ -578,7 +582,10 @@ export function TeamSection({ team }: { team: PlatformData["team"] }) {
             e.preventDefault()
             run(async () => {
               const r = await upsertTeamMemberAction(new FormData(e.currentTarget))
-              if (!r.error) setOpen(false)
+              if (!r.error) {
+                setOpen(false)
+                setPhotoUrls([])
+              }
               return r
             }, "Team member saved")
           }}
@@ -606,8 +613,14 @@ export function TeamSection({ team }: { team: PlatformData["team"] }) {
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="teamPhoto">Photo URL (optional)</Label>
-            <Input id="teamPhoto" name="photoUrl" placeholder="https://…" />
+            <Label>Photo (optional)</Label>
+            <FileUpload
+              accept="image"
+              maxFiles={1}
+              value={photoUrls}
+              onChange={(v) => setPhotoUrls(v as string[])}
+            />
+            <input type="hidden" name="photoUrl" value={photoUrls[0] || ""} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="teamShort">Short bio</Label>

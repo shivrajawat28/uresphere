@@ -29,7 +29,7 @@ export function Hero() {
 
         <div className="mt-11 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Button asChild size="lg" className="gap-2 px-7 text-base">
-            <Link href="/auth/sign-up">
+            <Link href="/auth/login">
               Enter your Sphere
               <ArrowRight className="size-4" />
             </Link>

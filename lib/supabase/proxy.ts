@@ -2,7 +2,6 @@ import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
 const PROTECTED_PREFIXES = ["/dashboard", "/chat", "/marketplace", "/admin", "/onboarding", "/settings"]
-const ONE_YEAR = 60 * 60 * 24 * 365
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -15,15 +14,7 @@ export async function updateSession(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      cookieOptions: {
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: ONE_YEAR,
-        // Explicit path ensures the auth cookies are read and written
-        // consistently across all routes, which is critical for session
-        // persistence when the user returns after closing the browser.
-        path: "/",
-      },
+
       cookies: {
         getAll() {
           return request.cookies.getAll()

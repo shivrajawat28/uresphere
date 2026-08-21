@@ -84,7 +84,7 @@ export function PlanFeedbackForm({ planId, initial, signedIn = false }: Props) {
           {saved ? "Update feedback" : "Submit feedback"}
         </Button>
         {!signedIn && (
-          <Link href="/auth/sign-up" className="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground">
+          <Link href="/auth/login" className="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground">
             Join your Sphere to vote
           </Link>
         )}

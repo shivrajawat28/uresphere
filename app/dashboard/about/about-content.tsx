@@ -1,7 +1,6 @@
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { WorkWithUsForm } from "@/components/landing/work-with-us-form"
-import { TEAM_MEMBERS, type TeamMember } from "./team"
 import {
   Compass,
   Eye,
@@ -43,7 +42,21 @@ const steps = [
   { n: "03", title: "Make campus life yours", body: "Chat, join groups, explore academics, clubs, events and the marketplace." },
 ]
 
-export function DashboardAboutContent({ sphereName }: { sphereName: string }) {
+export function DashboardAboutContent({
+  sphereName,
+  team,
+}: {
+  sphereName: string
+  team: {
+    id: string
+    name: string
+    role: string
+    photo_url: string | null
+    short_bio: string
+    bio: string
+    social_links: Record<string, string>
+  }[]
+}) {
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 md:px-8">
       {/* Header */}
@@ -143,17 +156,19 @@ export function DashboardAboutContent({ sphereName }: { sphereName: string }) {
       </div>
 
       {/* Our Team */}
-      <div className="mb-10">
-        <h2 className="mb-1 font-serif text-2xl font-medium text-foreground">Our Team</h2>
-        <p className="mb-6 max-w-xl text-sm text-muted-foreground">
-          The people building UreSphere, campus by campus.
-        </p>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {TEAM_MEMBERS.map((m) => (
-            <TeamCard key={m.name} member={m} />
-          ))}
+      {team.length > 0 && (
+        <div className="mb-10">
+          <h2 className="mb-1 font-serif text-2xl font-medium text-foreground">Our Team</h2>
+          <p className="mb-6 max-w-xl text-sm text-muted-foreground">
+            The people building UreSphere, campus by campus.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {team.map((m) => (
+              <TeamCard key={m.id} member={m} />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Work with us */}
       <Card className="border-border/70 bg-secondary/20">
@@ -170,14 +185,26 @@ export function DashboardAboutContent({ sphereName }: { sphereName: string }) {
   )
 }
 
-function TeamCard({ member }: { member: TeamMember }) {
+function TeamCard({
+  member,
+}: {
+  member: {
+    id: string
+    name: string
+    role: string
+    photo_url: string | null
+    short_bio: string
+    bio: string
+    social_links: Record<string, string>
+  }
+}) {
   return (
     <Card className="border-border/70 bg-card">
       <CardContent className="flex h-full flex-col gap-3 p-5">
-        {member.image ? (
+        {member.photo_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={member.image}
+            src={member.photo_url}
             alt={member.name}
             className="size-14 rounded-full object-cover ring-1 ring-border"
           />
@@ -190,19 +217,19 @@ function TeamCard({ member }: { member: TeamMember }) {
           <h3 className="font-medium text-foreground">{member.name}</h3>
           <p className="text-xs font-semibold uppercase tracking-wide text-primary">{member.role}</p>
         </div>
-        {member.bio && <p className="text-sm leading-relaxed text-muted-foreground">{member.bio}</p>}
-        {member.links && member.links.length > 0 && (
+        {member.short_bio && <p className="text-sm leading-relaxed text-muted-foreground">{member.short_bio}</p>}
+        {member.social_links && Object.keys(member.social_links).length > 0 && (
           <div className="mt-auto flex flex-wrap gap-2 pt-1">
-            {member.links.map((l) => (
+            {Object.entries(member.social_links).map(([platform, url]) => (
               <Link
-                key={l.href}
-                href={l.href}
+                key={platform}
+                href={url as string}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-xs font-medium text-primary transition hover:underline"
               >
                 <LinkIcon className="size-3" aria-hidden="true" />
-                {l.label}
+                {platform}
               </Link>
             ))}
           </div>
