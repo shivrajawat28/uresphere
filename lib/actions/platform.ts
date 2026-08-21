@@ -675,11 +675,16 @@ const SHOP_CATEGORIES = ["food", "stationery", "essentials", "other"] as const
 
 export async function upsertShopProductAction(formData: FormData): Promise<ActionResult> {
   const member = await requireMember()
+  const productSphereId = String(formData.get("sphereId") ?? member.sphereId)
+  if (!productSphereId) return { error: "Sphere ID is required." }
+
   let gate = await requirePermission("marketplace.review")
   if (!gate.ok) {
-    if (!member.sphereId) return { error: "You are not assigned to a Sphere." }
-    gate = await requireSphereAction(member.sphereId, "shop.products.update")
-    if (!gate.ok) return { error: "You don't have permission to manage shop products." }
+    gate = await requireSphereAction(productSphereId, "shop.products.update")
+    if (!gate.ok) {
+      gate = await requireSphereAction(productSphereId, "shop.products.create")
+      if (!gate.ok) return { error: "You don't have permission to manage shop products." }
+    }
   }
   const supabase = await createClient()
 
@@ -724,7 +729,10 @@ export async function upsertShopProductAction(formData: FormData): Promise<Actio
 
   if (id) {
     const { error } = await supabase.from("shop_products").update(payload).eq("id", id)
-    if (error) return { error: "Couldn't update the product." }
+    if (error) {
+      console.error("Shop product update error:", error)
+      return { error: `Couldn't update the product: ${error.message}` }
+    }
   } else {
     // If we passed the permission gate, we either have a member with a sphereId
     // or we are a global admin who MUST be operating within some sphere.
@@ -735,16 +743,21 @@ export async function upsertShopProductAction(formData: FormData): Promise<Actio
     const productSphereId = String(formData.get("sphereId") ?? member.sphereId)
     if (!productSphereId) return { error: "Sphere ID is required." }
 
-    const { error } = await supabase.from("shop_products").insert({
+    console.log("[ShopAdmin Debug] Payload:", { ...payload, sphere_id: productSphereId, created_by: member.userId })
+    const { data, error } = await supabase.from("shop_products").insert({
       ...payload,
       sphere_id: productSphereId,
       created_by: member.userId,
     })
-    if (error) return { error: "Couldn't create the product." }
+    console.log("[ShopAdmin Debug] Insert Result:", { error, data })
+    if (error) {
+      console.error("[ShopAdmin Debug] Exact Supabase error:", error)
+      return { error: `Couldn't create the product: ${error.message} (Code: ${error.code})` }
+    }
   }
 
-  revalidatePath("/dashboard/marketplace")
   revalidatePath("/admin")
+  revalidatePath("/dashboard")
   return { error: null }
 }
 
