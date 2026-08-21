@@ -318,6 +318,69 @@ export async function checkoutCartAction(formData: FormData): Promise<ActionResu
   if (first?.error) return { error: first.error }
   if (!first?.order_id) return { error: "Couldn't place your order. Try again." }
 
+  const orderIds = Array.isArray(rpcResult) ? rpcResult.map((r: unknown) => (r as { order_id: string }).order_id).filter(Boolean) : []
+  
+  if (shopProductIds.length > 0 && orderIds.length > 0) {
+    const { data: shopOrders } = await supabase
+      .from("marketplace_orders")
+      .select("seller_id, order_items!inner(item_type)")
+      .in("id", orderIds)
+      .eq("order_items.item_type", "shop")
+
+    if (shopOrders && shopOrders.length > 0) {
+      const { data: superAdmins } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("role", "super_admin")
+
+      const { data: sphereAdmins } = await supabase
+        .from("user_spheres")
+        .select("user_id, profiles!inner(role)")
+        .eq("sphere_id", member.sphereId)
+        .eq("membership_status", "active")
+        .eq("profiles.role", "admin")
+        
+      const notifications = []
+      
+      // We deduplicate seller_ids to avoid multiple notifications to the same shop admin for the same checkout
+      const shopSellerIds = Array.from(new Set(shopOrders.map((o: { seller_id: string }) => o.seller_id)))
+      
+      for (const sellerId of shopSellerIds) {
+        notifications.push({
+          user_id: sellerId,
+          type: "marketplace",
+          title: "New Shop Order",
+          body: `You received a new shop order from ${buyerName}.`,
+          link: "/dashboard/marketplace/shop-admin"
+        })
+      }
+      
+      // Collect all admin IDs to notify (Super Admins + Sphere Admins)
+      const adminIds = new Set<string>()
+      if (superAdmins) superAdmins.forEach(sa => adminIds.add(sa.id))
+      if (sphereAdmins) sphereAdmins.forEach(sa => adminIds.add(sa.user_id))
+      
+      // Ensure we don't notify a shop admin twice if they are also an admin
+      for (const sellerId of shopSellerIds) {
+        adminIds.delete(sellerId)
+      }
+
+      for (const adminId of adminIds) {
+        notifications.push({
+          user_id: adminId,
+          type: "marketplace",
+          title: "New Shop Order in Sphere",
+          body: `A new shop order was placed by ${buyerName}.`,
+          link: `/admin/spheres/${member.sphereId}`
+        })
+      }
+      
+      if (notifications.length > 0) {
+        await supabase.from("notifications").insert(notifications)
+      }
+    }
+  }
+
   // Clear the purchased lines from the cart.
   if (listingIds.length > 0) {
     await supabase.from("cart_items").delete().eq("user_id", member.userId).in("listing_id", listingIds)

@@ -110,7 +110,7 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
       .limit(100),
     supabase
       .from("marketplace_orders")
-      .select("id, listing_id, buyer_id, seller_id, buyer_name, buyer_phone, address, delivery_date, price_cents, fee_cents, settlement_cents, status, created_at")
+      .select("id, listing_id, buyer_id, seller_id, buyer_name, buyer_phone, address, delivery_date, price_cents, fee_cents, settlement_cents, status, created_at, order_items(title, quantity, unit_price_cents, item_type, shop_product:shop_products(image_urls, shop_name, created_by))")
       .eq("sphere_id", sphereId)
       .order("created_at", { ascending: false })
       .limit(100),

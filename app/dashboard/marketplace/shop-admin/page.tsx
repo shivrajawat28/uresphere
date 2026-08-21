@@ -75,7 +75,7 @@ export default async function ShopAdminPage(
       .order("created_at", { ascending: false }),
     supabase
       .from("marketplace_orders")
-      .select("id, listing_id, buyer_id, seller_id, buyer_name, buyer_phone, address, delivery_date, delivery_time, price_cents, fee_cents, settlement_cents, total_cents, status, created_at")
+      .select("id, listing_id, buyer_id, seller_id, buyer_name, buyer_phone, address, delivery_date, delivery_time, price_cents, fee_cents, settlement_cents, total_cents, status, created_at, order_items(title, quantity, unit_price_cents, item_type, shop_product:shop_products(image_urls, shop_name, created_by))")
       .eq("seller_id", member.userId)
       .order("created_at", { ascending: false })
       .limit(100),

@@ -754,6 +754,28 @@ export async function upsertShopProductAction(formData: FormData): Promise<Actio
       console.error("[ShopAdmin Debug] Exact Supabase error:", error)
       return { error: `Couldn't create the product: ${error.message} (Code: ${error.code})` }
     }
+    
+    if (active) {
+      const { data: members } = await supabase
+        .from("user_spheres")
+        .select("user_id")
+        .eq("sphere_id", productSphereId)
+        .eq("membership_status", "active")
+        .neq("user_id", member.userId)
+        
+      if (members && members.length > 0) {
+        const notifications = members.map((m) => ({
+          user_id: m.user_id,
+          type: "marketplace",
+          title: "New Shop Product",
+          body: `${shopName} added a new product: ${name}.`,
+          link: "/dashboard/marketplace",
+        }))
+        
+        // Supabase can handle bulk inserts of a reasonable size natively
+        await supabase.from("notifications").insert(notifications)
+      }
+    }
   }
 
   revalidatePath("/admin")
@@ -887,22 +909,37 @@ export async function createShopOrderAction(formData: FormData): Promise<ActionR
 
 export async function updateOrderStatusAction(
   orderId: string,
-  status: "pending" | "accepted" | "in_progress" | "delivered" | "cancelled",
+  status: "pending" | "accepted" | "in_progress" | "delivered" | "cancelled" | "rejected",
 ): Promise<ActionResult> {
   const member = await requireMember()
   const supabase = await createClient()
 
   const { data: order } = await supabase
     .from("marketplace_orders")
-    .select("id, seller_id, sphere_id")
+    .select("id, seller_id, sphere_id, buyer_id, status")
     .eq("id", orderId)
     .maybeSingle()
   if (!order) return { error: "Order not found." }
+  
+  if (order.status === status) return { error: null }
+
+  const notifyBuyer = async () => {
+    if (["accepted", "rejected", "delivered"].includes(status)) {
+      await supabase.from("notifications").insert({
+        user_id: order.buyer_id,
+        type: "marketplace",
+        title: `Order ${status}`,
+        body: `Your order has been marked as ${status}.`,
+        link: `/dashboard/marketplace`,
+      })
+    }
+  }
 
   // The seller updates their own order from the marketplace UI…
   if (order.seller_id === member.userId) {
     const { error } = await supabase.from("marketplace_orders").update({ status }).eq("id", orderId)
     if (error) return { error: "Couldn't update the order." }
+    await notifyBuyer()
     revalidatePath("/dashboard/marketplace")
     return { error: null }
   }
@@ -914,6 +951,7 @@ export async function updateOrderStatusAction(
   const { error } = await supabase.from("marketplace_orders").update({ status }).eq("id", orderId)
   if (error) return { error: "Couldn't update the order." }
 
+  await notifyBuyer()
   revalidatePath("/dashboard/marketplace")
   revalidatePath("/admin")
   revalidatePath(`/admin/spheres/${order.sphere_id}`)

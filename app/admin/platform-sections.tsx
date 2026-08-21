@@ -15,7 +15,7 @@ import {
   setCollegeStatusAction,
   updatePromotionPaymentConfigAction,
 } from "@/lib/actions/platform"
-import { Orbit, Loader2, Plus, Upload, X, QrCode } from "lucide-react"
+import { Orbit, Loader2, Plus, Upload, X, QrCode, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -61,7 +61,7 @@ export type PlatformData = {
   promotionPayment: { price_inr: number; duration_days: number; qr_image_url: string | null; upi_id: string | null; instructions: string }
 }
 
-type OrderRow = {
+export type OrderRow = {
   id: string
   listing_id: string
   buyer_id: string
@@ -75,9 +75,20 @@ type OrderRow = {
   settlement_cents: number
   status: string
   created_at: string
+  items?: {
+    title: string
+    quantity: number
+    unit_price_cents: number
+    item_type: string
+    shop_product?: {
+      image_urls: string[] | null
+      shop_name: string
+      created_by: string
+    } | null
+  }[]
 }
 
-const ORDER_STATUSES = ["pending", "accepted", "in_progress", "delivered", "cancelled"] as const
+const ORDER_STATUSES = ["pending", "accepted", "in_progress", "delivered", "cancelled", "rejected"] as const
 const APP_STATUSES = ["new", "reviewed", "shortlisted", "rejected"] as const
 
 export function CollegesSection({ data, isSuperAdmin }: { data: PlatformData; isSuperAdmin: boolean }) {
@@ -777,6 +788,7 @@ const ORDER_LABELS: Record<string, string> = {
   in_progress: "In progress",
   delivered: "Delivered",
   cancelled: "Cancelled",
+  rejected: "Rejected",
 }
 
 export function OrdersSection({ orders }: { orders: OrderRow[] }) {
@@ -809,7 +821,41 @@ export function OrdersSection({ orders }: { orders: OrderRow[] }) {
                 🏠 {o.address}
                 {o.delivery_date ? ` · by ${o.delivery_date}` : ""}
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">
+              
+              {o.items && o.items.length > 0 && (
+                <div className="mt-3 flex flex-col gap-2 rounded-md border border-border/50 bg-secondary/20 p-2">
+                  {o.items.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-3">
+                      {item.item_type === "shop" && item.shop_product?.image_urls?.[0] ? (
+                        <img 
+                          src={item.shop_product.image_urls[0]} 
+                          alt={item.title} 
+                          className="size-10 shrink-0 rounded object-cover border border-border/50" 
+                        />
+                      ) : (
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded bg-secondary/50 border border-border/50">
+                          <span className="text-xs text-muted-foreground">{item.quantity}x</span>
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-foreground">
+                          {item.title} <span className="text-xs text-muted-foreground">x{item.quantity}</span>
+                        </p>
+                        {item.item_type === "shop" && item.shop_product?.shop_name && (
+                          <p className="truncate text-xs text-muted-foreground">
+                            Shop: {item.shop_product.shop_name}
+                          </p>
+                        )}
+                      </div>
+                      <div className="shrink-0 text-sm">
+                        {((item.unit_price_cents * item.quantity) / 100).toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <p className="mt-3 text-xs text-muted-foreground">
                 {(o.price_cents / 100).toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 })} · fee{" "}
                 {(o.fee_cents / 100).toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 })} · settlement{" "}
                 {(o.settlement_cents / 100).toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 })}
@@ -831,6 +877,63 @@ export function OrdersSection({ orders }: { orders: OrderRow[] }) {
           </Card>
         ))
       )}
+    </div>
+  )
+}
+
+export function SuperAdminShopOrdersSection({ allOrders, users }: { allOrders: OrderRow[], users: { userId: string; realName: string; }[] }) {
+  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [search, setSearch] = useState("")
+  
+  // Filter for ONLY shop orders (orders that have at least one shop item, or where the seller is a shop admin).
+  // The most robust check is if items contain a shop_product.
+  const shopOrders = allOrders.filter(o => o.items?.some(i => i.item_type === "shop"))
+
+  const q = search.trim().toLowerCase()
+  const filtered = shopOrders.filter((o) => {
+    if (statusFilter !== "all" && o.status !== statusFilter) return false
+    
+    if (q) {
+      const matchBuyer = o.buyer_name.toLowerCase().includes(q)
+      const sellerProfile = users.find(u => u.userId === o.seller_id)
+      const matchSeller = sellerProfile?.realName?.toLowerCase().includes(q)
+      
+      const matchProductOrShop = o.items?.some(item => 
+        item.title.toLowerCase().includes(q) || 
+        (item.shop_product?.shop_name && item.shop_product.shop_name.toLowerCase().includes(q))
+      )
+      
+      return matchBuyer || matchSeller || matchProductOrShop
+    }
+    return true
+  })
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          {["all", ...ORDER_STATUSES].map((s) => (
+            <Button
+              key={s}
+              variant={statusFilter === s ? "default" : "outline"}
+              size="sm"
+              onClick={() => setStatusFilter(s)}
+            >
+              {s === "all" ? "All" : ORDER_LABELS[s]}
+            </Button>
+          ))}
+        </div>
+        <div className="relative w-full sm:w-64">
+          <Input
+            placeholder="Search orders..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8"
+          />
+          <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+        </div>
+      </div>
+      <OrdersSection orders={filtered} />
     </div>
   )
 }
