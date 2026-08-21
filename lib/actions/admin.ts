@@ -111,6 +111,8 @@ export async function updateDegreeAction(formData: FormData): Promise<ActionResu
 
   const { error } = await supabase.from("subjects").update({ degree: newDegree }).eq("sphere_id", sphereId).eq("degree", oldDegree)
   if (error) return { error: "Couldn't update degree." }
+  await supabase.from("academic_calendar").update({ degree: newDegree }).eq("sphere_id", sphereId).eq("degree", oldDegree)
+  await supabase.from("academic_syllabuses").update({ degree: newDegree }).eq("sphere_id", sphereId).eq("degree", oldDegree)
 
   await logAudit(supabase, gate.member.userId, sphereId, "degree_updated", "academic", undefined, { oldDegree, newDegree })
   for (const p of spherePaths(sphereId)) revalidatePath(p)
@@ -134,6 +136,8 @@ export async function updateYearAction(formData: FormData): Promise<ActionResult
 
   const { error } = await supabase.from("subjects").update({ year: newYear }).eq("sphere_id", sphereId).eq("degree", degree).eq("year", oldYear)
   if (error) return { error: "Couldn't update year." }
+  await supabase.from("academic_calendar").update({ year: newYear }).eq("sphere_id", sphereId).eq("degree", degree).eq("year", oldYear)
+  await supabase.from("academic_syllabuses").update({ year: newYear }).eq("sphere_id", sphereId).eq("degree", degree).eq("year", oldYear)
 
   await logAudit(supabase, gate.member.userId, sphereId, "year_updated", "academic", undefined, { degree, oldYear, newYear })
   for (const p of spherePaths(sphereId)) revalidatePath(p)
@@ -158,6 +162,7 @@ export async function updateBranchAction(formData: FormData): Promise<ActionResu
 
   const { error } = await supabase.from("subjects").update({ branch: newBranch }).eq("sphere_id", sphereId).eq("degree", degree).eq("year", year).eq("branch", oldBranch)
   if (error) return { error: "Couldn't update branch." }
+  await supabase.from("academic_syllabuses").update({ branch: newBranch }).eq("sphere_id", sphereId).eq("degree", degree).eq("year", year).eq("branch", oldBranch)
 
   await logAudit(supabase, gate.member.userId, sphereId, "branch_updated", "academic", undefined, { degree, year, oldBranch, newBranch })
   for (const p of spherePaths(sphereId)) revalidatePath(p)

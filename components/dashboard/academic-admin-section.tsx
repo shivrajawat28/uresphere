@@ -6,6 +6,9 @@ import {
   createSubjectAction,
   updateSubjectAction,
   deleteSubjectAction,
+  updateDegreeAction,
+  updateYearAction,
+  updateBranchAction,
   createUnitAction,
   updateUnitAction,
   deleteUnitAction,
@@ -143,6 +146,11 @@ export function AcademicAdminSectionClient({
   const [editingChapter, setEditingChapter] = useState<Chapter | null>(null)
   const [chapterUnitId, setChapterUnitId] = useState<string>("")
 
+  // Taxonomy Edit state
+  const [editingDegree, setEditingDegree] = useState(false)
+  const [editingYear, setEditingYear] = useState(false)
+  const [editingBranch, setEditingBranch] = useState(false)
+
   const defaultSubjectId = subjects[0]?.id ?? ""
   const effectiveUnitSubject = unitSubjectId || defaultSubjectId
   const effectiveResourceSubject = resourceSubjectId || defaultSubjectId
@@ -186,6 +194,49 @@ export function AcademicAdminSectionClient({
           </p>
         </div>
       </div>
+
+      {/* Taxonomy Edit Controls */}
+      <section className="mb-8 rounded-lg border border-border/70 bg-card p-4">
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground">
+          <Pencil className="size-4 text-primary" aria-hidden="true" />
+          Edit Taxonomy
+        </h2>
+        <div className="flex flex-col gap-2 sm:flex-row sm:gap-6">
+          <div className="flex items-center justify-between sm:justify-start gap-3 rounded-md bg-muted/50 px-3 py-2">
+            <div>
+              <p className="text-xs text-muted-foreground">Degree</p>
+              <p className="text-sm font-medium">{section.degree || "—"}</p>
+            </div>
+            {section.degree && (
+              <Button size="icon" variant="ghost" className="size-7" onClick={() => setEditingDegree(true)} title="Edit Degree">
+                <Pencil className="size-3.5" />
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center justify-between sm:justify-start gap-3 rounded-md bg-muted/50 px-3 py-2">
+            <div>
+              <p className="text-xs text-muted-foreground">Year</p>
+              <p className="text-sm font-medium">{section.year || "—"}</p>
+            </div>
+            {section.year && (
+              <Button size="icon" variant="ghost" className="size-7" onClick={() => setEditingYear(true)} title="Edit Year">
+                <Pencil className="size-3.5" />
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center justify-between sm:justify-start gap-3 rounded-md bg-muted/50 px-3 py-2">
+            <div>
+              <p className="text-xs text-muted-foreground">Branch</p>
+              <p className="text-sm font-medium">{section.branch || "—"}</p>
+            </div>
+            {section.branch && (
+              <Button size="icon" variant="ghost" className="size-7" onClick={() => setEditingBranch(true)} title="Edit Branch">
+                <Pencil className="size-3.5" />
+              </Button>
+            )}
+          </div>
+        </div>
+      </section>
 
       {/* Subjects */}
       <section className="mb-8">
@@ -998,6 +1049,108 @@ export function AcademicAdminSectionClient({
       <p className="text-xs text-muted-foreground/70">
         Section: {sectionLabel} · {sphereName}
       </p>
+
+      {/* Degree Edit Dialog */}
+      <Dialog open={editingDegree} onOpenChange={setEditingDegree}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Degree</DialogTitle>
+            <DialogDescription>Rename this degree across the sphere.</DialogDescription>
+          </DialogHeader>
+          <form
+            action={(formData) =>
+              run(async () => {
+                formData.set("sphereId", sphereId)
+                formData.set("oldDegree", section.degree ?? "")
+                const r = await updateDegreeAction(formData)
+                if (!r.error) setEditingDegree(false)
+                return r
+              }, "Degree updated")
+            }
+            className="flex flex-col gap-4"
+          >
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="newDegree">Degree Name</Label>
+              <Input id="newDegree" name="newDegree" required defaultValue={section.degree ?? ""} />
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="ghost">Cancel</Button>
+              </DialogClose>
+              <Button type="submit" disabled={isPending}>Save changes</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Year Edit Dialog */}
+      <Dialog open={editingYear} onOpenChange={setEditingYear}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Year</DialogTitle>
+            <DialogDescription>Rename this year across the degree.</DialogDescription>
+          </DialogHeader>
+          <form
+            action={(formData) =>
+              run(async () => {
+                formData.set("sphereId", sphereId)
+                formData.set("degree", section.degree ?? "")
+                formData.set("oldYear", section.year ?? "")
+                const r = await updateYearAction(formData)
+                if (!r.error) setEditingYear(false)
+                return r
+              }, "Year updated")
+            }
+            className="flex flex-col gap-4"
+          >
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="newYear">Year Name</Label>
+              <Input id="newYear" name="newYear" required defaultValue={section.year ?? ""} />
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="ghost">Cancel</Button>
+              </DialogClose>
+              <Button type="submit" disabled={isPending}>Save changes</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Branch Edit Dialog */}
+      <Dialog open={editingBranch} onOpenChange={setEditingBranch}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Branch</DialogTitle>
+            <DialogDescription>Rename this branch across the year.</DialogDescription>
+          </DialogHeader>
+          <form
+            action={(formData) =>
+              run(async () => {
+                formData.set("sphereId", sphereId)
+                formData.set("degree", section.degree ?? "")
+                formData.set("year", section.year ?? "")
+                formData.set("oldBranch", section.branch ?? "")
+                const r = await updateBranchAction(formData)
+                if (!r.error) setEditingBranch(false)
+                return r
+              }, "Branch updated")
+            }
+            className="flex flex-col gap-4"
+          >
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="newBranch">Branch Name</Label>
+              <Input id="newBranch" name="newBranch" required defaultValue={section.branch ?? ""} />
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="ghost">Cancel</Button>
+              </DialogClose>
+              <Button type="submit" disabled={isPending}>Save changes</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
