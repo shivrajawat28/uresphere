@@ -10,9 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { upsertShopProfileAction } from "@/lib/actions/shop-admin"
-import { ShopProductsSection } from "@/components/dashboard/shop-products-section"
-import { OrdersSection } from "@/components/marketplace/orders-section"
-import type { ShopProductRow, OrderRow } from "@/app/admin/spheres/[sphereId]/page"
+import { ShopProductsSection, OrdersSection } from "@/app/admin/platform-sections"
+import type { ShopProductRow, OrderRow } from "@/app/admin/spheres/[sphereId]/sphere-admin"
 
 export function ShopAdminSection({
   sphereId,
@@ -127,7 +126,7 @@ export function ShopAdminSection({
               No orders yet.
             </div>
           ) : (
-            <OrdersSection orders={orders} orderStatusLabels={orderStatusLabels} currentUserId={userId} />
+            <OrdersSection orders={orders} />
           )}
         </div>
       )}

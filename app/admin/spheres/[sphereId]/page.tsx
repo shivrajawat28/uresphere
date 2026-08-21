@@ -144,7 +144,7 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
       .eq("sphere_id", sphereId)
       .limit(300),
     supabase.from("platform_config").select("value").eq("key", "promotion_payment").maybeSingle(),
-    supabase.from("shop_profiles").select("shop_name").eq("sphere_id", sphereId).eq("user_id", member.userId).maybeSingle(),
+    supabase.from("shop_profiles").select("shop_name").eq("sphere_id", sphereId).eq("user_id", access.member.userId).maybeSingle(),
   ])
 
   const [
@@ -416,7 +416,8 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
         createdAt: g.created_at,
       }))}
       rolesByUser={Object.fromEntries(rolesByUser)}
-      currentUserId={member.userId}
+      currentUserId={access.member.userId}
+      shopName={shopName}
     />
   )
 }

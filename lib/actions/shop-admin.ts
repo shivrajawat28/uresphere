@@ -6,7 +6,9 @@ import { requireSphereAction } from "./admin"
 import type { ActionResult } from "./marketplace"
 
 export async function upsertShopProfileAction(sphereId: string, formData: FormData): Promise<ActionResult> {
-  const member = await requireSphereAction(sphereId, "shop.update")
+  const gate = await requireSphereAction(sphereId, "shop.update")
+  if (!gate.ok) return { error: gate.error }
+  const member = gate.member
 
   const shopName = String(formData.get("shopName") ?? "").trim()
   if (shopName.length < 2) return { error: "Shop name must be at least 2 characters." }

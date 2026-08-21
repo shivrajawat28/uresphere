@@ -85,7 +85,7 @@ type ChapterRow = { id: string; unit_id: string; name: string }
 type CalendarRow = { id: string; title: string; event_date: string; description: string; pdf_url: string | null; external_url: string | null; degree: string | null; year: string | null }
 type SyllabusRow = { id: string; title: string; degree: string; year: string; branch: string; pdf_url: string | null; external_url: string | null }
 type ResourceRow = { id: string; title: string; type: string; url: string; subject_id: string | null; chapter_id: string | null; subjectName: string }
-type OrderRow = {
+export type OrderRow = {
   id: string
   listing_id: string
   buyer_id: string
@@ -100,7 +100,7 @@ type OrderRow = {
   status: string
   created_at: string
 }
-type ShopProductRow = {
+export type ShopProductRow = {
   id: string
   name: string
   description: string
