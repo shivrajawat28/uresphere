@@ -40,7 +40,7 @@ export function MarketplaceTabs({
 
   const tabs: { id: Tab; label: string; icon: typeof Package; badge?: number }[] = [
     { id: "marketplace", label: "Your Marketplace", icon: ShoppingBag },
-    { id: "shop", label: "UreSphere Shop", icon: Package },
+    { id: "shop", label: "ÙreSphere Shop", icon: Package },
     { id: "cart", label: "Cart", icon: ShoppingCart, badge: cartItems.length },
     { id: "orders", label: "My orders", icon: ShoppingCart },
   ]

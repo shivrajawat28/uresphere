@@ -15,7 +15,7 @@ export default function NotFound() {
         The page you&apos;re looking for doesn&apos;t exist, or you don&apos;t have access to it.
       </p>
       <Button asChild>
-        <Link href="/">Back to UreSphere</Link>
+        <Link href="/">Back to ÙreSphere</Link>
       </Button>
     </main>
   )

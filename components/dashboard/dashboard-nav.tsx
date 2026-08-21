@@ -242,7 +242,7 @@ export function DashboardNav({
     <>
       {/* Mobile top bar */}
       <div className="sticky top-0 z-40 flex items-center justify-between border-b border-border bg-background/80 px-4 py-3 backdrop-blur md:hidden">
-        <Link href="/dashboard" aria-label="UreSphere home" className="flex items-center gap-2">
+        <Link href="/dashboard" aria-label="ÙreSphere home" className="flex items-center gap-2">
           <UreSphereLogo className="h-5" wordmark wordmarkClassName="text-base" />
         </Link>
         <div className="flex items-center gap-3">
@@ -261,7 +261,7 @@ export function DashboardNav({
       {/* Desktop sidebar */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-sidebar p-4 md:sticky md:top-0 md:flex md:h-svh">
         <div className="mb-6 flex items-center justify-between px-1">
-          <Link href="/dashboard" aria-label="UreSphere home" className="flex items-center gap-2">
+          <Link href="/dashboard" aria-label="ÙreSphere home" className="flex items-center gap-2">
             <UreSphereLogo className="h-6" wordmark />
           </Link>
           <ThemeToggle />

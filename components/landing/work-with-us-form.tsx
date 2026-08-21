@@ -73,7 +73,7 @@ export function WorkWithUsForm() {
         <Input id="portfolio" name="portfolio" placeholder="https://github.com/you" />
       </div>
       <div className="space-y-2 sm:col-span-2">
-        <Label htmlFor="motivation">Why do you want to work with UreSphere?</Label>
+        <Label htmlFor="motivation">Why do you want to work with ÙreSphere?</Label>
         <Input id="motivation" name="motivation" required placeholder="What excites you about campus communities?" />
       </div>
       <div className="space-y-2 sm:col-span-2">

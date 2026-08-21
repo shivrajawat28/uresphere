@@ -24,26 +24,26 @@ export const metadata: Metadata = {
   // development. Never a Vercel preview domain (see lib/site-url.ts).
   metadataBase: getMetadataBase(),
   title: {
-    default: 'UreSphere — Your Campus. Your Sphere. Your Community.',
-    template: '%s · UreSphere',
+    default: 'ÙreSphere — Your Campus. Your Sphere. Your Community.',
+    template: '%s · ÙreSphere',
   },
   description:
-    'UreSphere is a private, campus-verified community platform. Chat, trade, and organize with people who actually share your college — anonymously.',
+    'ÙreSphere is a private, campus-verified community platform. Chat, trade, and organize with people who actually share your college — anonymously.',
   alternates: {
     canonical: '/',
   },
   openGraph: {
-    title: 'UreSphere — Your Campus. Your Sphere. Your Community.',
+    title: 'ÙreSphere — Your Campus. Your Sphere. Your Community.',
     description:
       'A private community drawn around your campus. Anonymous by design, scoped to your Sphere.',
     type: 'website',
-    siteName: 'UreSphere',
+    siteName: 'ÙreSphere',
     url: '/',
     locale: 'en_IN',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'UreSphere — Your Campus. Your Sphere. Your Community.',
+    title: 'ÙreSphere — Your Campus. Your Sphere. Your Community.',
     description: 'A private community drawn around your campus. Anonymous by design.',
   },
   // Favicon package lives in /public/favicon/ (favicon.ico, favicon.svg,

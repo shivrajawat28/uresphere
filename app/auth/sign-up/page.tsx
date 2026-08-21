@@ -344,7 +344,7 @@ export default function SignUpPage() {
         </p>
 
         <p className="mt-4 text-center text-sm text-muted-foreground">
-          Already on UreSphere?{" "}
+          Already on ÙreSphere?{" "}
           <Link href="/auth/login" className="text-foreground underline underline-offset-4 hover:text-primary">
             Sign in
           </Link>

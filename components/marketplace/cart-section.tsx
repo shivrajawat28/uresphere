@@ -63,7 +63,7 @@ export function CartSection({ cartItems }: { cartItems: CartItem[] }) {
         <ShoppingCart className="size-8 text-muted-foreground/50" aria-hidden="true" />
         <p className="font-serif text-lg text-foreground">Your cart is empty</p>
         <p className="max-w-sm text-sm text-muted-foreground">
-          Add items from your Marketplace or the UreSphere Shop and check out with delivery details.
+          Add items from your Marketplace or the ÙreSphere Shop and check out with delivery details.
         </p>
       </div>
     )
@@ -89,7 +89,7 @@ export function CartSection({ cartItems }: { cartItems: CartItem[] }) {
                 <p className="text-xs text-muted-foreground">
                   {formatINR(item.price_cents)} each · line total {formatINR(item.price_cents * item.quantity)}
                 </p>
-                {item.status === "shop" && <p className="text-[11px] text-muted-foreground">UreSphere Shop item</p>}
+                {item.status === "shop" && <p className="text-[11px] text-muted-foreground">ÙreSphere Shop item</p>}
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 <Button

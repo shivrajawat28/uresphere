@@ -5,16 +5,16 @@ import { AboutContent } from "./about-content"
 import { getSiteUrl } from "@/lib/site-url"
 
 export const metadata: Metadata = {
-  title: "About | UreSphere",
+  title: "About | ÙreSphere",
   description:
-    "UreSphere is a campus platform where every college gets its own private Sphere. Read about why we built it, meet the team, work with us, or advertise on UreSphere.",
+    "ÙreSphere is a campus platform where every college gets its own private Sphere. Read about why we built it, meet the team, work with us, or advertise on UreSphere.",
   alternates: {
     canonical: "/about",
   },
   openGraph: {
-    title: "About UreSphere",
+    title: "About ÙreSphere",
     description:
-      "UreSphere is a campus platform where every college gets its own private Sphere. Read about why we built it, meet the team, work with us, or advertise on UreSphere.",
+      "ÙreSphere is a campus platform where every college gets its own private Sphere. Read about why we built it, meet the team, work with us, or advertise on UreSphere.",
     type: "website",
     url: "/about",
   },
@@ -40,11 +40,11 @@ export default async function AboutPage() {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "AboutPage",
-    name: "About UreSphere",
+    name: "About ÙreSphere",
     url: `${siteUrl}/about`,
     mainEntity: {
       "@type": "Organization",
-      name: "UreSphere",
+      name: "ÙreSphere",
       url: siteUrl,
       description: "A private, campus-verified community platform.",
     },

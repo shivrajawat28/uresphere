@@ -22,7 +22,7 @@ export default function SuspendedPage() {
         </form>
         <p className="mt-6 text-xs text-muted-foreground">
           <Link href="/" className="underline underline-offset-4 hover:text-foreground">
-            Back to UreSphere
+            Back to ÙreSphere
           </Link>
         </p>
       </div>

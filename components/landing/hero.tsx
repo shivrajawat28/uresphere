@@ -35,7 +35,7 @@ export function Hero() {
             </Link>
           </Button>
           <Button asChild size="lg" variant="outline" className="px-7 text-base">
-            <a href="#how-it-works">Explore UreSphere</a>
+            <a href="#how-it-works">Explore ÙreSphere</a>
           </Button>
         </div>
 

@@ -55,7 +55,7 @@ export default async function DashboardRoadmapPage({
           Help shape what&apos;s coming next.
         </h1>
         <p className="mx-auto mt-3 max-w-xl text-sm text-muted-foreground md:text-base">
-          We&apos;re building UreSphere in the open. Rate the plans below — your feedback decides what we
+          We&apos;re building ÙreSphere in the open. Rate the plans below — your feedback decides what we
           ship first.
         </p>
       </div>

@@ -37,7 +37,7 @@ const principles = [
 ]
 
 const steps = [
-  { n: "01", title: "Claim your campus", body: "Pick your college from the UreSphere directory and enter its dedicated Sphere." },
+  { n: "01", title: "Claim your campus", body: "Pick your college from the ÙreSphere directory and enter its dedicated Sphere." },
   { n: "02", title: "Become anonymous", body: "Get a unique handle that becomes your identity. Your real identity stays private." },
   { n: "03", title: "Make campus life yours", body: "Chat, join groups, explore academics, clubs, events and the marketplace." },
 ]
@@ -63,13 +63,13 @@ export function DashboardAboutContent({
       <div className="mb-10">
         <Badge variant="outline" className="mb-3 border-border/60 font-normal text-primary">
           <Orbit className="mr-1 size-3" aria-hidden="true" />
-          About UreSphere
+          About ÙreSphere
         </Badge>
         <h1 className="text-pretty font-serif text-3xl font-semibold text-foreground md:text-4xl">
           Your campus, your Sphere
         </h1>
         <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base">
-          UreSphere is a private campus community built around one simple idea: your college deserves its own space.
+          ÙreSphere is a private campus community built around one simple idea: your college deserves its own space.
           Chat, discover, learn, join groups, explore events and trade with people from your campus — while your public
           identity stays anonymous. Nothing crosses into another Sphere.
         </p>
@@ -82,7 +82,7 @@ export function DashboardAboutContent({
             <Compass className="size-5 text-primary" aria-hidden="true" />
             <h2 className="font-serif text-lg font-medium text-foreground">Why we built it</h2>
             <p className="text-sm leading-relaxed text-muted-foreground">
-              Campus life shouldn&apos;t be scattered across dozens of group chats. UreSphere brings the conversations,
+              Campus life shouldn&apos;t be scattered across dozens of group chats. ÙreSphere brings the conversations,
               people, academics, events and everyday campus life into one place — where you can be part of the
               community without putting your real identity out there.
             </p>
@@ -104,10 +104,10 @@ export function DashboardAboutContent({
       {/* The story / mission */}
       <Card className="mb-10 border-border/70 bg-secondary/20">
         <CardContent className="flex flex-col gap-3 p-5 md:p-6">
-          <h2 className="font-serif text-xl font-medium text-foreground">The UreSphere story</h2>
+          <h2 className="font-serif text-xl font-medium text-foreground">The ÙreSphere story</h2>
           <p className="text-sm leading-relaxed text-muted-foreground md:text-base">
             Most campus conversations happen in throwaway group chats — loud, fragmented, and with no real sense of
-            community. UreSphere started with a simple mission: give every campus one place to belong, where students
+            community. ÙreSphere started with a simple mission: give every campus one place to belong, where students
             can be themselves without being exposed. Everything we build — anonymous handles, Sphere isolation,
             campus-scoped moderation — exists to protect that.
           </p>
@@ -141,7 +141,7 @@ export function DashboardAboutContent({
 
       {/* How it works */}
       <div className="mb-10">
-        <h2 className="mb-5 font-serif text-2xl font-medium text-foreground">How UreSphere works</h2>
+        <h2 className="mb-5 font-serif text-2xl font-medium text-foreground">How ÙreSphere works</h2>
         <div className="grid gap-4 md:grid-cols-3">
           {steps.map((s) => (
             <Card key={s.n} className="border-border/70 bg-card">
@@ -160,7 +160,7 @@ export function DashboardAboutContent({
         <div className="mb-10">
           <h2 className="mb-1 font-serif text-2xl font-medium text-foreground">Our Team</h2>
           <p className="mb-6 max-w-xl text-sm text-muted-foreground">
-            The people building UreSphere, campus by campus.
+            The people building ÙreSphere, campus by campus.
           </p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {team.map((m) => (

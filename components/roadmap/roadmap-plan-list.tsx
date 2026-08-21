@@ -11,7 +11,7 @@ type MyFeedback = { rating: number; comment: string }
  * Every card embeds the shared feedback form (1–5 stars + optional comment,
  * one editable entry per user per plan). When `highlightPlanId` matches a
  * card, the page scrolls to it and briefly highlights it — this is what a
- * "New UreSphere update" notification deep link lands on.
+ * "New ÙreSphere update" notification deep link lands on.
  */
 export function RoadmapPlanList({
   plans,

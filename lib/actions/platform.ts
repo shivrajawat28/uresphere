@@ -553,7 +553,7 @@ export async function submitWorkWithUsAction(formData: FormData): Promise<Action
 
   if (fullName.length < 2) return { error: "Please enter your full name." }
   if (!isValidEmail(email)) return { error: "Please enter a valid email." }
-  if (motivation.length < 10) return { error: "Tell us a bit more about why you want to work with UreSphere (min 10 characters)." }
+  if (motivation.length < 10) return { error: "Tell us a bit more about why you want to work with ÙreSphere (min 10 characters)." }
 
   const { error } = await supabase.from("work_with_us_applications").insert({
     full_name: fullName,
@@ -668,7 +668,7 @@ export async function answerEventQuestionAction(questionId: string, answer: stri
 }
 
 // ---------------------------------------------------------------------------
-// UreSphere Shop (admin-managed products)
+// ÙreSphere Shop (admin-managed products)
 // ---------------------------------------------------------------------------
 
 const SHOP_CATEGORIES = ["food", "stationery", "essentials", "other"] as const

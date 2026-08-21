@@ -31,7 +31,7 @@ export default function GlobalError({
       <div className="flex gap-3">
         <Button onClick={reset}>Try again</Button>
         <Button asChild variant="outline">
-          <Link href="/">Back to UreSphere</Link>
+          <Link href="/">Back to ÙreSphere</Link>
         </Button>
       </div>
     </main>

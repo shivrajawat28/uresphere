@@ -14,7 +14,7 @@ export default function Page() {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "WebApplication",
-    name: "UreSphere",
+    name: "ÙreSphere",
     url: siteUrl,
     applicationCategory: "SocialNetworkingApplication",
     operatingSystem: "Web",
@@ -26,7 +26,7 @@ export default function Page() {
     },
     publisher: {
       "@type": "Organization",
-      name: "UreSphere",
+      name: "ÙreSphere",
       url: siteUrl,
     },
   }

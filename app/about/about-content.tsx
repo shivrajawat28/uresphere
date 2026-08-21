@@ -26,13 +26,13 @@ export function AboutContent({ team, advertising }: Props) {
         <div className="mx-auto max-w-4xl px-4 py-20 md:px-8 md:py-28">
           <p className="mb-4 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-primary">
             <Orbit className="size-4" />
-            About UreSphere
+            About ÙreSphere
           </p>
           <h1 className="font-serif text-4xl font-medium leading-tight text-balance text-foreground md:text-5xl">
           Your campus, your Sphere
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground md:text-lg">
-          UreSphere is a private campus community built around one simple idea: your college deserves its own space.
+          ÙreSphere is a private campus community built around one simple idea: your college deserves its own space.
           Chat, discover, learn, join groups, explore events and trade with people from your campus — while your public identity stays anonymous. Nothing crosses into another Sphere.  
           </p>
         </div>
@@ -45,7 +45,7 @@ export function AboutContent({ team, advertising }: Props) {
             <h2 className="font-serif text-2xl font-medium text-foreground md:text-3xl">Why we built it</h2>
             <p className="mt-4 text-sm leading-relaxed text-muted-foreground md:text-base">
             Campus life shouldn&apos;t be scattered across dozens of group chats.
-            UreSphere brings the conversations, people, academics, events and everyday campus life into one place — where you can be part of the community without putting your real identity out there.
+            ÙreSphere brings the conversations, people, academics, events and everyday campus life into one place — where you can be part of the community without putting your real identity out there.
             </p>
           </div>
           <div>
@@ -66,11 +66,11 @@ One platform, Thousands of Spheres, Millions of campus stories.
       {/* How it works */}
       <section className="border-b border-border/60 bg-secondary/20">
         <div className="mx-auto max-w-5xl px-4 py-16 md:px-8">
-          <h2 className="mb-8 font-serif text-2xl font-medium text-foreground md:text-3xl">How UreSphere works</h2>
+          <h2 className="mb-8 font-serif text-2xl font-medium text-foreground md:text-3xl">How ÙreSphere works</h2>
           <div className="grid gap-6 md:grid-cols-3">
             {[
-              { n: "01", t: "Claim your campus", d: "Choose your college from the UreSphere directory and enter its dedicated Sphere." },
-              { n: "02", t: "Become anonymous", d: "You receive a unique handle that becomes your identity across UreSphere. Your real identity stays private." },
+              { n: "01", t: "Claim your campus", d: "Choose your college from the ÙreSphere directory and enter its dedicated Sphere." },
+              { n: "02", t: "Become anonymous", d: "You receive a unique handle that becomes your identity across ÙreSphere. Your real identity stays private." },
               { n: "03", t: "Make campus life yours", d: "Chat, join groups, explore academics, discover clubs and events, buy and sell, and see what's happening around your campus." },
             ].map((s) => (
               <div key={s.n} className="rounded-lg border border-border/70 bg-background p-6">
@@ -88,7 +88,7 @@ One platform, Thousands of Spheres, Millions of campus stories.
         <div className="mx-auto max-w-5xl px-4 py-16 md:px-8">
           <h2 className="mb-2 font-serif text-2xl font-medium text-foreground md:text-3xl">Our team</h2>
           <p className="mb-10 max-w-xl text-sm text-muted-foreground">
-            The people building UreSphere, campus by campus.
+            The people building ÙreSphere, campus by campus.
           </p>
           {team.length === 0 ? (
             <p className="text-sm text-muted-foreground">The team page is being set up. Check back soon.</p>
@@ -129,7 +129,7 @@ One platform, Thousands of Spheres, Millions of campus stories.
       {/* Advertise */}
       <section className="border-b border-border/60">
         <div className="mx-auto max-w-4xl px-4 py-16 text-center md:px-8">
-          <h2 className="mb-2 font-serif text-2xl font-medium text-foreground md:text-3xl">Advertise on UreSphere</h2>
+          <h2 className="mb-2 font-serif text-2xl font-medium text-foreground md:text-3xl">Advertise on ÙreSphere</h2>
           <p className="mx-auto mb-8 max-w-xl text-sm text-muted-foreground">
             Reach thousands of students inside their campus Spheres. From canteens to cafés to campus startups —
             put your brand where students already are.

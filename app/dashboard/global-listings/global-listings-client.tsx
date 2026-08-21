@@ -77,7 +77,7 @@ export function GlobalListingsClient({
         <div>
           <h1 className="text-pretty font-serif text-3xl font-semibold text-foreground">Global Listings</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Hostels, cafés, gyms, and local businesses — the same listings in every Sphere, maintained by UreSphere.
+            Hostels, cafés, gyms, and local businesses — the same listings in every Sphere, maintained by ÙreSphere.
           </p>
         </div>
         {canManage && (
