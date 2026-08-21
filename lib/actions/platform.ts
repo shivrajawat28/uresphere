@@ -842,6 +842,49 @@ export async function createOrderAction(formData: FormData): Promise<ActionResul
   return { error: null }
 }
 
+export async function createShopOrderAction(formData: FormData): Promise<ActionResult> {
+  const member = await requireMember()
+  if (!member.sphereId) return { error: "Not a member of a Sphere." }
+
+  const shopProductId = String(formData.get("shopProductId") ?? "")
+  const buyerName = String(formData.get("buyerName") ?? "").trim()
+  const buyerPhone = String(formData.get("buyerPhone") ?? "").trim()
+  const address = String(formData.get("address") ?? "").trim()
+  const deliveryDate = String(formData.get("deliveryDate") ?? "") || null
+  const deliveryTime = String(formData.get("deliveryTime") ?? "").trim()
+
+  if (!shopProductId) return { error: "Missing product." }
+  if (buyerName.length < 2) return { error: "Please enter your name." }
+  if (buyerPhone.length < 7) return { error: "Please enter a valid phone number." }
+  if (address.length < 5) return { error: "Please enter a delivery address." }
+  if (deliveryTime.length > 200) return { error: "Delivery time is too long." }
+
+  const supabase = await createClient()
+
+  // Use the new checkout_mixed_cart RPC to handle shop products correctly
+  // This bypasses the actual cart and simulates a single-item checkout
+  const { data: rpcResult, error: rpcError } = await supabase.rpc("checkout_mixed_cart", {
+    p_buyer_id: member.userId,
+    p_buyer_name: buyerName,
+    p_buyer_phone: buyerPhone,
+    p_address: address,
+    p_delivery_date: deliveryDate,
+    p_delivery_time: deliveryTime,
+    p_listing_ids: [],
+    p_listing_quantities: [],
+    p_shop_product_ids: [shopProductId],
+    p_shop_quantities: [1],
+  })
+
+  if (rpcError) return { error: "Couldn't place your order. Try again." }
+  const first = Array.isArray(rpcResult) && rpcResult.length > 0 ? rpcResult[0] : null
+  if (first?.error) return { error: first.error }
+  if (!first?.order_id) return { error: "Couldn't place your order. Try again." }
+
+  revalidatePath("/dashboard/marketplace")
+  return { error: null }
+}
+
 export async function updateOrderStatusAction(
   orderId: string,
   status: "pending" | "accepted" | "in_progress" | "delivered" | "cancelled",

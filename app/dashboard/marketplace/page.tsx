@@ -33,6 +33,7 @@ export type ShopProduct = {
   delivery_info: string
   payment_info: string
   active: boolean
+  created_by: string
 }
 
 export type OrderItem = {

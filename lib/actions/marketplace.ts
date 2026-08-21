@@ -208,6 +208,32 @@ export async function addToCartAction(listingId: string, quantity: number): Prom
   return { error: null }
 }
 
+export async function addShopProductToCartAction(shopProductId: string, quantity: number): Promise<ActionResult> {
+  const member = await requireMember()
+  const qty = Number.isInteger(quantity) && quantity > 0 ? Math.min(quantity, 20) : 1
+  if (!member.sphereId) return { error: "Not a member of a Sphere." }
+
+  const supabase = await createClient()
+  const { data: product } = await supabase
+    .from("shop_products")
+    .select("id, active, created_by")
+    .eq("id", shopProductId)
+    .eq("sphere_id", member.sphereId)
+    .maybeSingle()
+  if (!product) return { error: "Shop product not found in your Sphere." }
+  if (!product.active) return { error: "This item is no longer available." }
+  if (product.created_by === member.userId) return { error: "You can't add your own shop product to the cart." }
+
+  const { error } = await supabase.from("cart_items").upsert(
+    { user_id: member.userId, shop_product_id: shopProductId, quantity: qty },
+    { onConflict: "user_id,shop_product_id" },
+  )
+  if (error) return { error: "Couldn't add the item to your cart." }
+
+  revalidatePath("/dashboard/marketplace")
+  return { error: null }
+}
+
 export async function updateCartQuantityAction(itemId: string, quantity: number): Promise<ActionResult> {
   const member = await requireMember()
   const qty = Number.isInteger(quantity) ? Math.max(1, Math.min(quantity, 20)) : 1

@@ -93,7 +93,7 @@ export function MarketplaceTabs({
           <MarketplaceGrid listings={listings} currentUserId={currentUserId} />
         </>
       )}
-      {tab === "shop" && <ShopGrid products={products} />}
+      {tab === "shop" && <ShopGrid products={products} currentUserId={currentUserId} />}
       {tab === "cart" && <CartSection cartItems={cartItems} />}
       {tab === "orders" && (
         <OrdersSection orders={orders} orderStatusLabels={orderStatusLabels} currentUserId={currentUserId} />
