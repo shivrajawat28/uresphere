@@ -838,6 +838,7 @@ export function OrdersSection({ orders }: { orders: OrderRow[] }) {
 export type ShopProductRow = {
   id: string
   name: string
+  shop_name: string
   description: string
   category: string
   price_cents: number
@@ -916,7 +917,7 @@ export function ShopProductsSection({ sphereId, products }: { sphereId: string; 
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-foreground">{p.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {SHOP_CATEGORY_LABELS[p.category] ?? p.category} ·{" "}
+                    Shop: {p.shop_name} · {SHOP_CATEGORY_LABELS[p.category] ?? p.category} ·{" "}
                     {(p.price_cents / 100).toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 })}
                     {" · "}
                     {p.availability.replace("_", " ")}
@@ -962,6 +963,11 @@ export function ShopProductsSection({ sphereId, products }: { sphereId: string; 
               </button>
             </div>
             <form action={submit} className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="spShopName">Shop name</Label>
+                <Input id="spShopName" name="shopName" required maxLength={120} defaultValue={editing?.shop_name ?? ""} placeholder="e.g. CampusKart" />
+                <p className="text-[10px] text-muted-foreground">This is displayed above the product in the marketplace.</p>
+              </div>
               <div className="space-y-1.5">
                 <Label htmlFor="spName">Product name</Label>
                 <Input id="spName" name="name" required maxLength={120} defaultValue={editing?.name ?? ""} placeholder="Printed notes bundle" />

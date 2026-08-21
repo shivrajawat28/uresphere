@@ -116,7 +116,7 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
       .limit(100),
     supabase
       .from("shop_products")
-      .select("id, name, description, category, price_cents, image_urls, availability, active, delivery_info, payment_info")
+      .select("id, name, shop_name, description, category, price_cents, image_urls, availability, delivery_info, payment_info, active")
       .eq("sphere_id", sphereId)
       .order("created_at", { ascending: false })
       .limit(100),
@@ -144,7 +144,6 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
       .eq("sphere_id", sphereId)
       .limit(300),
     supabase.from("platform_config").select("value").eq("key", "promotion_payment").maybeSingle(),
-    supabase.from("shop_profiles").select("shop_name").eq("sphere_id", sphereId).eq("user_id", access.member.userId).maybeSingle(),
   ])
 
   const [
@@ -170,12 +169,10 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
     groupsResult,
     rolesResult,
     promoConfigResult,
-    shopProfileResult,
   ] = results
 
   const userRows = usersResult.data ?? []
   const shopProducts = shopProductsResult.data ?? []
-  const shopName = shopProfileResult.data?.shop_name ?? null
   const auditLogs = auditLogsResult.data ?? []
 
   const memberIds = Array.from(new Set(userRows.map((u) => u.user_id)))
@@ -378,6 +375,7 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
       shopProducts={(shopProductsResult.data ?? []).map((p) => ({
         id: p.id,
         name: p.name,
+        shop_name: p.shop_name,
         description: p.description,
         category: p.category,
         price_cents: p.price_cents,
@@ -417,7 +415,6 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
       }))}
       rolesByUser={Object.fromEntries(rolesByUser)}
       currentUserId={access.member.userId}
-      shopName={shopName}
     />
   )
 }

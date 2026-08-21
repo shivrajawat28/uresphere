@@ -64,19 +64,12 @@ export default async function ShopAdminPage(
   // Orders are strictly isolated to those where seller_id = member.userId.
   // Global/Sphere admins acting in this view will ALSO only see products/orders bound to their specific user ID.
   const [
-    { data: shopProfile },
     { data: shopProducts },
     { data: orders }
   ] = await Promise.all([
     supabase
-      .from("shop_profiles")
-      .select("shop_name")
-      .eq("sphere_id", workspace.sphereId)
-      .eq("user_id", member.userId)
-      .maybeSingle(),
-    supabase
       .from("shop_products")
-      .select("id, name, description, category, price_cents, image_urls, availability, delivery_info, payment_info, active")
+      .select("id, name, shop_name, description, category, price_cents, image_urls, availability, delivery_info, payment_info, active")
       .eq("sphere_id", workspace.sphereId)
       .eq("created_by", member.userId)
       .order("created_at", { ascending: false }),
@@ -98,7 +91,6 @@ export default async function ShopAdminPage(
       </div>
       <ShopAdminSection
         sphereId={workspace.sphereId}
-        shopName={shopProfile?.shop_name ?? null}
         products={shopProducts ?? []}
         orders={orders ?? []}
         userId={member.userId}

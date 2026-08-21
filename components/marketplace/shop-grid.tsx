@@ -58,7 +58,7 @@ export function ShopGrid({ products }: { products: ShopProduct[] }) {
             </div>
             {p.description && <p className="line-clamp-2 text-sm text-muted-foreground">{p.description}</p>}
             <p className="text-xs font-medium text-muted-foreground">
-              Sold by: <span className="text-foreground">{p.shopName || "ÙreSphere Shop"}</span>
+              Sold by: <span className="text-foreground">{p.shop_name || "ÙreSphere Shop"}</span>
             </p>
             {p.delivery_info && <p className="text-xs text-muted-foreground">📍 {p.delivery_info}</p>}
           </CardContent>

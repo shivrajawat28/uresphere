@@ -24,6 +24,7 @@ export type Listing = {
 export type ShopProduct = {
   id: string
   name: string
+  shop_name: string
   description: string
   category: string
   price_cents: number
@@ -32,7 +33,6 @@ export type ShopProduct = {
   delivery_info: string
   payment_info: string
   active: boolean
-  shopName?: string | null
 }
 
 export type OrderItem = {
@@ -92,7 +92,7 @@ export default async function MarketplacePage() {
   // by the Vercel Cron). Idempotent — hidden listings are already 'removed'.
   await supabase.rpc("cleanup_sold_listings")
 
-  const [{ data: listings }, { data: products }, { data: shopProfiles }, { data: orders }, { data: cart }, ads] = await Promise.all([
+  const [{ data: listings }, { data: products }, { data: orders }, { data: cart }, ads] = await Promise.all([
     supabase
       .from("marketplace_listings")
       .select(
@@ -103,14 +103,10 @@ export default async function MarketplacePage() {
       .order("created_at", { ascending: false }),
     supabase
       .from("shop_products")
-      .select("id, name, description, category, price_cents, image_urls, availability, delivery_info, payment_info, active, created_by")
+      .select("id, name, shop_name, description, category, price_cents, image_urls, availability, delivery_info, payment_info, active, created_by")
       .eq("sphere_id", member.sphereId)
       .eq("active", true)
       .order("created_at", { ascending: false }),
-    supabase
-      .from("shop_profiles")
-      .select("user_id, shop_name")
-      .eq("sphere_id", member.sphereId),
     supabase
       .from("marketplace_orders")
       .select(
@@ -257,16 +253,10 @@ export default async function MarketplacePage() {
     return []
   })
 
-  const shopProfilesMap = new Map((shopProfiles ?? []).map((p) => [p.user_id, p.shop_name]))
-  const mappedProducts = (products ?? []).map((p) => ({
-    ...p,
-    shopName: shopProfilesMap.get(p.created_by) ?? null,
-  }))
-
   return (
     <MarketplaceTabs
       listings={Array.from(listingById.values()) as Listing[]}
-      products={mappedProducts as ShopProduct[]}
+      products={products as ShopProduct[]}
       orders={(orders ?? []).map((o) => ({ ...o, items: itemsByOrder.get(o.id) ?? [] })) as Order[]}
       cartItems={cartItems}
       pendingListings={pendingListings}

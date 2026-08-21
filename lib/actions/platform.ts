@@ -674,12 +674,18 @@ export async function answerEventQuestionAction(questionId: string, answer: stri
 const SHOP_CATEGORIES = ["food", "stationery", "essentials", "other"] as const
 
 export async function upsertShopProductAction(formData: FormData): Promise<ActionResult> {
-  const gate = await requirePermission("marketplace.review")
-  if (!gate.ok) return { error: gate.error }
+  const member = await requireMember()
+  let gate = await requirePermission("marketplace.review")
+  if (!gate.ok) {
+    if (!member.sphereId) return { error: "You are not assigned to a Sphere." }
+    gate = await requireSphereAction(member.sphereId, "shop.products.update")
+    if (!gate.ok) return { error: "You don't have permission to manage shop products." }
+  }
   const supabase = await createClient()
 
   const id = String(formData.get("id") ?? "")
   const name = String(formData.get("name") ?? "").trim()
+  const shopName = String(formData.get("shopName") ?? "").trim()
   const description = String(formData.get("description") ?? "").trim()
   const category = String(formData.get("category") ?? "essentials")
   const priceRaw = String(formData.get("price") ?? "").trim()
@@ -690,6 +696,7 @@ export async function upsertShopProductAction(formData: FormData): Promise<Actio
   const active = String(formData.get("active") ?? "on") === "on"
 
   if (name.length < 1 || name.length > 120) return { error: "Product name must be 1–120 characters." }
+  if (shopName.length < 2 || shopName.length > 120) return { error: "Shop name must be 2–120 characters." }
   if (!SHOP_CATEGORIES.includes(category as (typeof SHOP_CATEGORIES)[number])) return { error: "Invalid category." }
   const price = Number.parseFloat(priceRaw)
   if (!Number.isFinite(price) || price < 0) return { error: "Enter a valid non-negative price." }
@@ -704,6 +711,7 @@ export async function upsertShopProductAction(formData: FormData): Promise<Actio
 
   const payload = {
     name,
+    shop_name: shopName,
     description,
     category,
     price_cents: Math.round(price * 100),
@@ -718,10 +726,19 @@ export async function upsertShopProductAction(formData: FormData): Promise<Actio
     const { error } = await supabase.from("shop_products").update(payload).eq("id", id)
     if (error) return { error: "Couldn't update the product." }
   } else {
+    // If we passed the permission gate, we either have a member with a sphereId
+    // or we are a global admin who MUST be operating within some sphere.
+    // However, the gate object itself (which is either a generic Member or Sphere Member)
+    // might not expose the specific sphere_id we are creating the product for if it's a global admin.
+    // Actually, we can get the sphereId from the form data because Sphere Admins and Shop Admins
+    // only have one sphere, and the form provides it.
+    const productSphereId = String(formData.get("sphereId") ?? member.sphereId)
+    if (!productSphereId) return { error: "Sphere ID is required." }
+
     const { error } = await supabase.from("shop_products").insert({
       ...payload,
-      sphere_id: gate.member.sphereId,
-      created_by: gate.member.userId,
+      sphere_id: productSphereId,
+      created_by: member.userId,
     })
     if (error) return { error: "Couldn't create the product." }
   }
@@ -732,12 +749,24 @@ export async function upsertShopProductAction(formData: FormData): Promise<Actio
 }
 
 export async function deleteShopProductAction(productId: string): Promise<ActionResult> {
-  const gate = await requirePermission("marketplace.review")
-  if (!gate.ok) return { error: gate.error }
+  const member = await requireMember()
+  let gate = await requirePermission("marketplace.review")
+  if (!gate.ok) {
+    if (!member.sphereId) return { error: "You are not assigned to a Sphere." }
+    gate = await requireSphereAction(member.sphereId, "shop.products.delete")
+    if (!gate.ok) return { error: "You don't have permission to delete shop products." }
+  }
   const supabase = await createClient()
 
   const { data: product } = await supabase.from("shop_products").select("id, sphere_id").eq("id", productId).maybeSingle()
-  if (!product || product.sphere_id !== gate.member.sphereId) return { error: "Product not found in your Sphere." }
+  if (!product) return { error: "Product not found." }
+  
+  // If we're relying on the sphere-scoped gate, ensure the product belongs to that sphere.
+  // Global admins (who pass requirePermission) can delete from any sphere.
+  const globalGate = await requirePermission("marketplace.review")
+  if (!globalGate.ok && product.sphere_id !== member.sphereId) {
+    return { error: "Product not found in your Sphere." }
+  }
 
   const { error } = await supabase.from("shop_products").delete().eq("id", productId)
   if (error) return { error: "Couldn't delete the product." }

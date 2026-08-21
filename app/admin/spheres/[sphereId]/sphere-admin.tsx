@@ -103,6 +103,7 @@ export type OrderRow = {
 export type ShopProductRow = {
   id: string
   name: string
+  shop_name: string
   description: string
   category: string
   price_cents: number
@@ -142,7 +143,6 @@ export function SphereAdmin({
   messages,
   groups,
   rolesByUser,
-  shopName,
   currentUserId,
 }: {
   sphereId: string
@@ -172,7 +172,6 @@ export function SphereAdmin({
   messages: SocialMessage[]
   groups: GroupRow[]
   rolesByUser: Record<string, { role: string; scope: Record<string, unknown> }[]>
-  shopName: string | null
   currentUserId: string
 }) {
   const [isPending, startTransition] = useTransition()
@@ -875,7 +874,6 @@ export function SphereAdmin({
             {isShopAdmin ? (
               <ShopAdminSection
                 sphereId={sphereId}
-                shopName={shopName}
                 products={shopProducts}
                 orders={orders}
                 userId={currentUserId}
