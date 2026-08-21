@@ -35,6 +35,7 @@ import { FileUpload } from "@/components/ui/file-upload"
 import { GroupInspectionDialog } from "@/components/admin/group-inspection-dialog"
 import { OrdersSection, ShopProductsSection } from "../../platform-sections"
 import { AcademicAdminSectionClient } from "@/components/dashboard/academic-admin-section"
+import { ShopAdminSection } from "@/components/dashboard/shop-admin-section"
 
 type UserRow = {
   userId: string
@@ -141,6 +142,8 @@ export function SphereAdmin({
   messages,
   groups,
   rolesByUser,
+  shopName,
+  currentUserId,
 }: {
   sphereId: string
   sphereName: string
@@ -169,6 +172,8 @@ export function SphereAdmin({
   messages: SocialMessage[]
   groups: GroupRow[]
   rolesByUser: Record<string, { role: string; scope: Record<string, unknown> }[]>
+  shopName: string | null
+  currentUserId: string
 }) {
   const [isPending, startTransition] = useTransition()
   const [userQuery, setUserQuery] = useState("")
@@ -290,7 +295,9 @@ export function SphereAdmin({
   }
 
   const can = (tab: string) => isSphereAdministrator || isSuperAdmin || permissions.includes(TAB_PERMISSION[tab])
-
+  
+  const allowed = new Set(permissions)
+  const isShopAdmin = !isSuperAdmin && !isSphereAdministrator && allowed.has("shop.read") && !allowed.has("academic.read")
   const filteredUsers = useMemo(() => {
     const q = userQuery.trim().toLowerCase()
     if (!q) return users
@@ -865,7 +872,17 @@ export function SphereAdmin({
         {/* Shop — admin-run products */}
         {can("marketplace") && (
           <TabsContent value="shop" className="space-y-4">
-            <ShopProductsSection sphereId={sphereId} products={shopProducts} />
+            {isShopAdmin ? (
+              <ShopAdminSection
+                sphereId={sphereId}
+                shopName={shopName}
+                products={shopProducts}
+                orders={orders}
+                userId={currentUserId}
+              />
+            ) : (
+              <ShopProductsSection sphereId={sphereId} products={shopProducts} />
+            )}
           </TabsContent>
         )}
 

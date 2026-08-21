@@ -14,6 +14,7 @@ export const ASSIGNABLE_ROLES = [
   "marketplace_moderator",
   "listing_manager",
   "promotion_moderator",
+  "shop_admin",
 ] as const
 
 export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number]
@@ -28,6 +29,7 @@ export const ROLE_LABELS: Record<AssignableRole, string> = {
   marketplace_moderator: "Marketplace moderator",
   listing_manager: "Listing manager",
   promotion_moderator: "Promotion moderator",
+  shop_admin: "Shop admin",
 }
 
 // Default permission set applied when the admin assigns a role without picking
@@ -41,6 +43,7 @@ export const ROLE_PERMISSION_PRESETS: Record<AssignableRole, string[]> = {
     "marketplace.review", "marketplace.approve", "marketplace.reject", "marketplace.manage_orders",
     "listings.read", "listings.update", "listings.delete",
     "promotions.review", "promotions.approve", "promotions.reject", "promotions.delete",
+    "shop.read", "shop.update", "shop.products.read", "shop.products.create", "shop.products.update", "shop.products.delete", "shop.orders.read", "shop.orders.update",
   ],
   academic_manager: ["academic.read", "academic.create", "academic.update", "academic.delete"],
   social_moderator: ["social.moderate", "social.delete_message", "social.manage_groups"],
@@ -50,6 +53,7 @@ export const ROLE_PERMISSION_PRESETS: Record<AssignableRole, string[]> = {
   marketplace_moderator: ["marketplace.review", "marketplace.approve", "marketplace.reject", "marketplace.manage_orders"],
   listing_manager: ["listings.read", "listings.update", "listings.delete"],
   promotion_moderator: ["promotions.review", "promotions.approve", "promotions.reject", "promotions.delete"],
+  shop_admin: ["shop.read", "shop.update", "shop.products.read", "shop.products.create", "shop.products.update", "shop.products.delete", "shop.orders.read", "shop.orders.update"],
 }
 
 // Every permission name that exists anywhere (used by the permission picker).
@@ -73,6 +77,7 @@ export const ROLE_SCOPE_FIELDS: Record<AssignableRole, ("degree" | "year" | "bra
   marketplace_moderator: [],
   listing_manager: [],
   promotion_moderator: [],
+  shop_admin: [],
 }
 
 // Tabs a sphere-scoped manager may open, keyed by the permission that unlocks
@@ -86,4 +91,5 @@ export const TAB_PERMISSION: Record<string, string> = {
   marketplace: "marketplace.manage_orders",
   listings: "listings.read",
   promotions: "promotions.review",
+  shop: "shop.read",
 }

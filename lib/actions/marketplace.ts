@@ -260,16 +260,21 @@ export async function checkoutCartAction(formData: FormData): Promise<ActionResu
   const supabase = await createClient()
   const { data: cart } = await supabase
     .from("cart_items")
-    .select("listing_id, quantity")
+    .select("listing_id, shop_product_id, quantity")
     .eq("user_id", member.userId)
-    .not("listing_id", "is", null)
-  const lines = (cart ?? []).filter((c) => c.listing_id)
-  if (lines.length === 0) return { error: "Your cart is empty." }
+  
+  const listingLines = (cart ?? []).filter((c) => c.listing_id)
+  const shopLines = (cart ?? []).filter((c) => c.shop_product_id)
+  
+  if (listingLines.length === 0 && shopLines.length === 0) return { error: "Your cart is empty." }
 
-  const listingIds = lines.map((c) => c.listing_id as string)
-  const quantities = lines.map((c) => c.quantity)
+  const listingIds = listingLines.map((c) => c.listing_id as string)
+  const listingQuantities = listingLines.map((c) => c.quantity)
 
-  const { data: rpcResult, error: rpcError } = await supabase.rpc("checkout_cart", {
+  const shopProductIds = shopLines.map((c) => c.shop_product_id as string)
+  const shopQuantities = shopLines.map((c) => c.quantity)
+
+  const { data: rpcResult, error: rpcError } = await supabase.rpc("checkout_mixed_cart", {
     p_buyer_id: member.userId,
     p_buyer_name: buyerName,
     p_buyer_phone: buyerPhone,
@@ -277,7 +282,9 @@ export async function checkoutCartAction(formData: FormData): Promise<ActionResu
     p_delivery_date: deliveryDate,
     p_delivery_time: deliveryTime,
     p_listing_ids: listingIds,
-    p_quantities: quantities,
+    p_listing_quantities: listingQuantities,
+    p_shop_product_ids: shopProductIds,
+    p_shop_quantities: shopQuantities,
   })
 
   if (rpcError) return { error: "Couldn't place your order. Try again." }
@@ -285,8 +292,13 @@ export async function checkoutCartAction(formData: FormData): Promise<ActionResu
   if (first?.error) return { error: first.error }
   if (!first?.order_id) return { error: "Couldn't place your order. Try again." }
 
-  // Clear the purchased lines from the cart (keep any shop items untouched).
-  await supabase.from("cart_items").delete().eq("user_id", member.userId).in("listing_id", listingIds)
+  // Clear the purchased lines from the cart.
+  if (listingIds.length > 0) {
+    await supabase.from("cart_items").delete().eq("user_id", member.userId).in("listing_id", listingIds)
+  }
+  if (shopProductIds.length > 0) {
+    await supabase.from("cart_items").delete().eq("user_id", member.userId).in("shop_product_id", shopProductIds)
+  }
 
   revalidatePath("/dashboard/marketplace")
   return { error: null }
