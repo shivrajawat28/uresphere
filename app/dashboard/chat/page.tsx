@@ -50,7 +50,7 @@ export default async function ChatPage() {
     // chrome heights. dvh also shrinks when the keyboard opens so the
     // composer stays reachable on modern mobile browsers. Desktop keeps a
     // full-viewport height.
-    <div className="flex h-[calc(100dvh-9.5rem)] flex-col md:h-svh">
+    <div className="flex h-[calc(100dvh-6.5rem)] -mb-12 flex-col md:mb-0 md:h-svh">
       {/* Sponsored banner — Social placement (slim strip above the chat). */}
       <div className="mx-auto w-full max-w-2xl shrink-0 px-4 pt-3">
         <AdBanner placement="social" limit={1} />
