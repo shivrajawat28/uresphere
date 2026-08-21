@@ -147,9 +147,10 @@ export function AcademicAdminSectionClient({
   const [chapterUnitId, setChapterUnitId] = useState<string>("")
 
   // Taxonomy Edit state
-  const [editingDegree, setEditingDegree] = useState(false)
-  const [editingYear, setEditingYear] = useState(false)
-  const [editingBranch, setEditingBranch] = useState(false)
+  // Taxonomy Edit state
+  const [editingDegree, setEditingDegree] = useState<string | null>(null)
+  const [editingYear, setEditingYear] = useState<{ degree: string; year: string } | null>(null)
+  const [editingBranch, setEditingBranch] = useState<{ degree: string; year: string; branch: string } | null>(null)
 
   const defaultSubjectId = subjects[0]?.id ?? ""
   const effectiveUnitSubject = unitSubjectId || defaultSubjectId
@@ -171,6 +172,10 @@ export function AcademicAdminSectionClient({
       else toast.success(success)
     })
   }
+
+  const distinctDegrees = Array.from(new Set([...subjects.map(s => s.degree), ...calendar.map(c => c.degree), ...syllabuses.map(s => s.degree)].filter(Boolean))).sort()
+  const distinctYears = Array.from(new Set([...subjects.map(s => s.year), ...calendar.map(c => c.year), ...syllabuses.map(s => s.year)].filter(Boolean))).sort()
+  const distinctBranches = Array.from(new Set([...subjects.map(s => s.branch), ...syllabuses.map(s => s.branch)].filter(Boolean))).sort()
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 md:px-8">
@@ -201,39 +206,47 @@ export function AcademicAdminSectionClient({
           <Pencil className="size-4 text-primary" aria-hidden="true" />
           Edit Taxonomy
         </h2>
-        <div className="flex flex-col gap-2 sm:flex-row sm:gap-6">
-          <div className="flex items-center justify-between sm:justify-start gap-3 rounded-md bg-muted/50 px-3 py-2">
-            <div>
-              <p className="text-xs text-muted-foreground">Degree</p>
-              <p className="text-sm font-medium">{section.degree || "—"}</p>
-            </div>
-            {section.degree && (
-              <Button size="icon" variant="ghost" className="size-7" onClick={() => setEditingDegree(true)} title="Edit Degree">
-                <Pencil className="size-3.5" />
-              </Button>
-            )}
+        <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">
+          <div className="flex-1 space-y-2">
+            <h3 className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Degrees</h3>
+            {distinctDegrees.length === 0 ? <p className="text-sm text-muted-foreground">—</p> : distinctDegrees.map(d => (
+              <div key={d} className="flex items-center justify-between gap-3 rounded-md bg-muted/50 px-3 py-2">
+                <p className="text-sm font-medium">{d}</p>
+                <Button size="icon" variant="ghost" className="size-7" onClick={() => setEditingDegree(d as string)} title={`Edit ${d}`}>
+                  <Pencil className="size-3.5" />
+                </Button>
+              </div>
+            ))}
           </div>
-          <div className="flex items-center justify-between sm:justify-start gap-3 rounded-md bg-muted/50 px-3 py-2">
-            <div>
-              <p className="text-xs text-muted-foreground">Year</p>
-              <p className="text-sm font-medium">{section.year || "—"}</p>
-            </div>
-            {section.year && (
-              <Button size="icon" variant="ghost" className="size-7" onClick={() => setEditingYear(true)} title="Edit Year">
-                <Pencil className="size-3.5" />
-              </Button>
-            )}
+          <div className="flex-1 space-y-2">
+            <h3 className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Years</h3>
+            {distinctYears.length === 0 ? <p className="text-sm text-muted-foreground">—</p> : distinctYears.map(y => {
+              const deg = (subjects.find(s => s.year === y)?.degree || calendar.find(c => c.year === y)?.degree || syllabuses.find(s => s.year === y)?.degree) ?? ""
+              return (
+                <div key={y} className="flex items-center justify-between gap-3 rounded-md bg-muted/50 px-3 py-2">
+                  <p className="text-sm font-medium">{y}</p>
+                  <Button size="icon" variant="ghost" className="size-7" onClick={() => setEditingYear({ degree: deg, year: y as string })} title={`Edit ${y}`}>
+                    <Pencil className="size-3.5" />
+                  </Button>
+                </div>
+              )
+            })}
           </div>
-          <div className="flex items-center justify-between sm:justify-start gap-3 rounded-md bg-muted/50 px-3 py-2">
-            <div>
-              <p className="text-xs text-muted-foreground">Branch</p>
-              <p className="text-sm font-medium">{section.branch || "—"}</p>
-            </div>
-            {section.branch && (
-              <Button size="icon" variant="ghost" className="size-7" onClick={() => setEditingBranch(true)} title="Edit Branch">
-                <Pencil className="size-3.5" />
-              </Button>
-            )}
+          <div className="flex-1 space-y-2">
+            <h3 className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Branches</h3>
+            {distinctBranches.length === 0 ? <p className="text-sm text-muted-foreground">—</p> : distinctBranches.map(b => {
+              const subj = subjects.find(s => s.branch === b) || syllabuses.find(s => s.branch === b)
+              const deg = subj?.degree ?? ""
+              const yr = subj?.year ?? ""
+              return (
+                <div key={b} className="flex items-center justify-between gap-3 rounded-md bg-muted/50 px-3 py-2">
+                  <p className="text-sm font-medium">{b}</p>
+                  <Button size="icon" variant="ghost" className="size-7" onClick={() => setEditingBranch({ degree: deg, year: yr, branch: b as string })} title={`Edit ${b}`}>
+                    <Pencil className="size-3.5" />
+                  </Button>
+                </div>
+              )
+            })}
           </div>
         </div>
       </section>
@@ -1051,7 +1064,7 @@ export function AcademicAdminSectionClient({
       </p>
 
       {/* Degree Edit Dialog */}
-      <Dialog open={editingDegree} onOpenChange={setEditingDegree}>
+      <Dialog open={!!editingDegree} onOpenChange={(o) => setEditingDegree(o ? editingDegree : null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Degree</DialogTitle>
@@ -1061,9 +1074,9 @@ export function AcademicAdminSectionClient({
             action={(formData) =>
               run(async () => {
                 formData.set("sphereId", sphereId)
-                formData.set("oldDegree", section.degree ?? "")
+                formData.set("oldDegree", editingDegree ?? "")
                 const r = await updateDegreeAction(formData)
-                if (!r.error) setEditingDegree(false)
+                if (!r.error) setEditingDegree(null)
                 return r
               }, "Degree updated")
             }
@@ -1071,7 +1084,7 @@ export function AcademicAdminSectionClient({
           >
             <div className="flex flex-col gap-2">
               <Label htmlFor="newDegree">Degree Name</Label>
-              <Input id="newDegree" name="newDegree" required defaultValue={section.degree ?? ""} />
+              <Input id="newDegree" name="newDegree" required defaultValue={editingDegree ?? ""} />
             </div>
             <DialogFooter>
               <DialogClose asChild>
@@ -1084,7 +1097,7 @@ export function AcademicAdminSectionClient({
       </Dialog>
 
       {/* Year Edit Dialog */}
-      <Dialog open={editingYear} onOpenChange={setEditingYear}>
+      <Dialog open={!!editingYear} onOpenChange={(o) => setEditingYear(o ? editingYear : null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Year</DialogTitle>
@@ -1094,10 +1107,10 @@ export function AcademicAdminSectionClient({
             action={(formData) =>
               run(async () => {
                 formData.set("sphereId", sphereId)
-                formData.set("degree", section.degree ?? "")
-                formData.set("oldYear", section.year ?? "")
+                formData.set("degree", editingYear?.degree ?? "")
+                formData.set("oldYear", editingYear?.year ?? "")
                 const r = await updateYearAction(formData)
-                if (!r.error) setEditingYear(false)
+                if (!r.error) setEditingYear(null)
                 return r
               }, "Year updated")
             }
@@ -1105,7 +1118,7 @@ export function AcademicAdminSectionClient({
           >
             <div className="flex flex-col gap-2">
               <Label htmlFor="newYear">Year Name</Label>
-              <Input id="newYear" name="newYear" required defaultValue={section.year ?? ""} />
+              <Input id="newYear" name="newYear" required defaultValue={editingYear?.year ?? ""} />
             </div>
             <DialogFooter>
               <DialogClose asChild>
@@ -1118,7 +1131,7 @@ export function AcademicAdminSectionClient({
       </Dialog>
 
       {/* Branch Edit Dialog */}
-      <Dialog open={editingBranch} onOpenChange={setEditingBranch}>
+      <Dialog open={!!editingBranch} onOpenChange={(o) => setEditingBranch(o ? editingBranch : null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Branch</DialogTitle>
@@ -1128,11 +1141,11 @@ export function AcademicAdminSectionClient({
             action={(formData) =>
               run(async () => {
                 formData.set("sphereId", sphereId)
-                formData.set("degree", section.degree ?? "")
-                formData.set("year", section.year ?? "")
-                formData.set("oldBranch", section.branch ?? "")
+                formData.set("degree", editingBranch?.degree ?? "")
+                formData.set("year", editingBranch?.year ?? "")
+                formData.set("oldBranch", editingBranch?.branch ?? "")
                 const r = await updateBranchAction(formData)
-                if (!r.error) setEditingBranch(false)
+                if (!r.error) setEditingBranch(null)
                 return r
               }, "Branch updated")
             }
@@ -1140,7 +1153,7 @@ export function AcademicAdminSectionClient({
           >
             <div className="flex flex-col gap-2">
               <Label htmlFor="newBranch">Branch Name</Label>
-              <Input id="newBranch" name="newBranch" required defaultValue={section.branch ?? ""} />
+              <Input id="newBranch" name="newBranch" required defaultValue={editingBranch?.branch ?? ""} />
             </div>
             <DialogFooter>
               <DialogClose asChild>

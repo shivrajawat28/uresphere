@@ -179,7 +179,7 @@ export function AcademicClient({
   const selectedSubject = subjectsForBranch.find((s) => s.id === subjectId)
   const unitsForSubject = units.filter((u) => u.subject_id === subjectId)
 
-  const visibleResources = useMemo(() => {
+  const visibleResources = (() => {
     let r = resources.filter((res) => res.subject_id === subjectId)
     if (unitId) r = r.filter((res) => {
       // If the resource has a chapter, check if that chapter belongs to the selected unit
@@ -192,15 +192,10 @@ export function AcademicClient({
     if (typeFilter !== "all") r = r.filter((res) => res.type === typeFilter)
     if (query) r = r.filter((res) => res.title.toLowerCase().includes(query.toLowerCase()))
     return r
-  }, [resources, chapters, subjectId, unitId, typeFilter, query])
+  })()
 
-  const visibleSyllabuses = useMemo(() => {
-    return syllabuses.filter((s) => s.degree === degree && s.year === year && s.branch === "")
-  }, [syllabuses, degree, year])
-
-  const visibleCalendar = useMemo(() => {
-    return calendar.filter((c) => c.degree === degree && c.year === year)
-  }, [calendar, degree, year])
+  const visibleSyllabuses = syllabuses.filter((s) => s.degree === degree && s.year === year && s.branch === "")
+  const visibleCalendar = calendar.filter((c) => c.degree === degree && c.year === year)
 
   const crumb = [
     { label: degree || "All degrees", action: () => go({}) },
