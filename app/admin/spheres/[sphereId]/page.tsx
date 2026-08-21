@@ -24,26 +24,7 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
     ? (sphere.colleges[0] as { city?: string; state?: string } | null)?.state ?? ""
     : (sphere.colleges as { city?: string; state?: string } | null)?.state ?? ""
 
-  const [
-    { count: memberCount },
-    { count: openReports },
-    { count: pendingPromotions },
-    usersResult,
-    reportsResult,
-    promotionsResult,
-    listingsResult,
-    eventsResult,
-    clubsResult,
-    subjectsResult,
-    resourcesResult,
-    ordersResult,
-    shopProductsResult,
-    auditResult,
-    messagesResult,
-    groupsResult,
-    rolesResult,
-    promoConfigResult,
-  ] = await Promise.all([
+  const results = await Promise.all([
     supabase
       .from("user_spheres")
       .select("*", { count: "exact", head: true })
@@ -100,8 +81,30 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
       .order("branch")
       .limit(300),
     supabase
+      .from("units")
+      .select("id, subject_id, name")
+      .eq("sphere_id", sphereId)
+      .limit(1000),
+    supabase
+      .from("chapters")
+      .select("id, unit_id, name")
+      .eq("sphere_id", sphereId)
+      .limit(2000),
+    supabase
+      .from("academic_calendar")
+      .select("id, title, event_date, description, pdf_url, external_url, degree, year")
+      .eq("sphere_id", sphereId)
+      .order("event_date", { ascending: false })
+      .limit(300),
+    supabase
+      .from("academic_syllabuses")
+      .select("id, title, degree, year, branch, pdf_url, external_url")
+      .eq("sphere_id", sphereId)
+      .order("created_at", { ascending: false })
+      .limit(300),
+    supabase
       .from("academic_resources")
-      .select("id, title, type")
+      .select("id, title, type, url, subject_id, chapter_id, subjects(name)")
       .eq("sphere_id", sphereId)
       .order("created_at", { ascending: false })
       .limit(100),
@@ -143,11 +146,33 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
     supabase.from("platform_config").select("value").eq("key", "promotion_payment").maybeSingle(),
   ])
 
+  const [
+    memberCountResult,
+    openReportsResult,
+    pendingPromotionsResult,
+    usersResult,
+    reportsResult,
+    promotionsResult,
+    listingsResult,
+    eventsResult,
+    clubsResult,
+    subjectsResult,
+    unitsResult,
+    chaptersResult,
+    calendarResult,
+    syllabusesResult,
+    resourcesResult,
+    ordersResult,
+    shopProductsResult,
+    auditLogsResult,
+    messagesResult,
+    groupsResult,
+    rolesResult,
+    promoConfigResult,
+  ] = results
+
   const userRows = usersResult.data ?? []
 
-  // user_spheres -> profiles has no FK, so PostgREST cannot embed it. Fetch
-  // profile details separately and join client-side (same pattern as the
-  // dashboard). RLS gates these reads to admins who share the Sphere.
   const memberIds = Array.from(new Set(userRows.map((u) => u.user_id)))
   const { data: profileRows } = memberIds.length
     ? await supabase
@@ -183,10 +208,8 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
     }
   })
 
-  // Admin-only identity map: real name per author (never sent to normal users).
   const realNameById = new Map(users.map((u) => [u.userId, u.realName]))
 
-  // Anonymous handles for chat authors + group creators (same-Sphere only).
   const handleUserIds = Array.from(
     new Set([
       ...(messagesResult.data ?? []).map((m) => m.author_id),
@@ -199,7 +222,6 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
   const handleById = new Map((handleRows ?? []).map((h) => [h.user_id, h.anonymous_handle]))
   const creatorHandle = new Map((handleRows ?? []).map((h) => [h.user_id, h.anonymous_handle]))
 
-  // Anonymous handles for promotion requesters (same-Sphere only).
   const promoUserIds = Array.from(new Set((promotionsResult.data ?? []).map((p) => p.user_id)))
   const { data: promoHandleRows } = promoUserIds.length
     ? await supabase.from("user_spheres").select("user_id, anonymous_handle").in("user_id", promoUserIds)
@@ -211,8 +233,6 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
     duration_days?: number
   }
 
-  // Original content of deleted messages lives in chat_message_archives
-  // (RLS-gated to Sphere admins / super admins) — moderation-only.
   const deletedMessageIds = (messagesResult.data ?? []).filter((m) => m.is_deleted).map((m) => m.id)
   const { data: archiveRows } = deletedMessageIds.length
     ? await supabase
@@ -222,7 +242,6 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
     : { data: [] as { message_id: string; body: string }[] }
   const archiveByMessageId = new Map((archiveRows ?? []).map((a) => [a.message_id, a.body]))
 
-  // Member roles for the member-details modal (role_assignments are admin-scoped).
   const rolesByUser = new Map<string, { role: string; scope: Record<string, unknown> }[]>()
   for (const r of rolesResult.data ?? []) {
     const list = rolesByUser.get(r.user_id) ?? []
@@ -240,9 +259,9 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
       isSuperAdmin={access.isSuperAdmin}
       permissions={access.permissions}
       stats={{
-        memberCount: memberCount ?? 0,
-        openReports: openReports ?? 0,
-        pendingPromotions: pendingPromotions ?? 0,
+        memberCount: memberCountResult.count ?? 0,
+        openReports: openReportsResult.count ?? 0,
+        pendingPromotions: pendingPromotionsResult.count ?? 0,
       }}
       users={users}
       reports={(reportsResult.data ?? []).map((r) => ({
@@ -293,12 +312,49 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
       subjects={(subjectsResult.data ?? []).map((s) => ({
         id: s.id,
         name: s.name,
-        code: s.code,
+        code: s.code ?? "",
+        degree: s.degree ?? "",
+        year: s.year ?? "",
+        branch: s.branch ?? "",
+      }))}
+      units={(unitsResult.data ?? []).map((u) => ({
+        id: u.id,
+        subject_id: u.subject_id,
+        name: u.name,
+      }))}
+      chapters={(chaptersResult.data ?? []).map((c) => ({
+        id: c.id,
+        unit_id: c.unit_id,
+        name: c.name,
+      }))}
+      calendar={(calendarResult.data ?? []).map((c) => ({
+        id: c.id,
+        title: c.title,
+        event_date: c.event_date,
+        description: c.description ?? "",
+        pdf_url: c.pdf_url,
+        external_url: c.external_url,
+        degree: c.degree,
+        year: c.year,
+      }))}
+      syllabuses={(syllabusesResult.data ?? []).map((s) => ({
+        id: s.id,
+        title: s.title,
         degree: s.degree,
         year: s.year,
-        branch: s.branch,
+        branch: s.branch ?? "",
+        pdf_url: s.pdf_url,
+        external_url: s.external_url,
       }))}
-      resources={(resourcesResult.data ?? []).map((r) => ({ id: r.id, title: r.title, type: r.type }))}
+      resources={(resourcesResult.data ?? []).map((r) => ({
+        id: r.id,
+        title: r.title,
+        type: r.type,
+        url: r.url,
+        subject_id: r.subject_id,
+        chapter_id: r.chapter_id,
+        subjectName: (r.subjects as { name?: string })?.name ?? "Unknown",
+      }))}
       orders={(ordersResult.data ?? []).map((o) => ({
         id: o.id,
         listing_id: o.listing_id,
@@ -326,7 +382,7 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
         delivery_info: p.delivery_info,
         payment_info: p.payment_info,
       }))}
-      auditLogs={(auditResult.data ?? []).map((a) => ({
+      auditLogs={(auditLogsResult.data ?? []).map((a) => ({
         id: a.id,
         action: a.action,
         entity_type: a.entity_type,

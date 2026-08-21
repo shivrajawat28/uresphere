@@ -34,6 +34,7 @@ import { Search, ArrowLeft, Users, ShieldCheck, Plus, X, Eye, ExternalLink } fro
 import { FileUpload } from "@/components/ui/file-upload"
 import { GroupInspectionDialog } from "@/components/admin/group-inspection-dialog"
 import { OrdersSection, ShopProductsSection } from "../../platform-sections"
+import { AcademicAdminSectionClient } from "@/components/dashboard/academic-admin-section"
 
 type UserRow = {
   userId: string
@@ -78,7 +79,11 @@ type ListingRow = { id: string; title: string; price_cents: number; category: st
 type EventRow = { id: string; title: string; event_date: string; event_time: string | null; venue: string; organizer: string }
 type ClubRow = { id: string; name: string; description: string; logo_url: string | null; category: string }
 type SubjectRow = { id: string; name: string; code: string; degree: string; year: string; branch: string }
-type ResourceRow = { id: string; title: string; type: string }
+type UnitRow = { id: string; subject_id: string; name: string }
+type ChapterRow = { id: string; unit_id: string; name: string }
+type CalendarRow = { id: string; title: string; event_date: string; description: string; pdf_url: string | null; external_url: string | null; degree: string | null; year: string | null }
+type SyllabusRow = { id: string; title: string; degree: string; year: string; branch: string; pdf_url: string | null; external_url: string | null }
+type ResourceRow = { id: string; title: string; type: string; url: string; subject_id: string | null; chapter_id: string | null; subjectName: string }
 type OrderRow = {
   id: string
   listing_id: string
@@ -125,6 +130,10 @@ export function SphereAdmin({
   events,
   clubs,
   subjects,
+  units,
+  chapters,
+  calendar,
+  syllabuses,
   resources,
   orders,
   shopProducts,
@@ -149,6 +158,10 @@ export function SphereAdmin({
   events: EventRow[]
   clubs: ClubRow[]
   subjects: SubjectRow[]
+  units: UnitRow[]
+  chapters: ChapterRow[]
+  calendar: CalendarRow[]
+  syllabuses: SyllabusRow[]
   resources: ResourceRow[]
   orders: OrderRow[]
   shopProducts: ShopProductRow[]
@@ -826,65 +839,19 @@ export function SphereAdmin({
         {/* Academic */}
         {can("academic") && (
           <TabsContent value="academic" className="space-y-4">
-            <CreateSubjectForm sphereId={sphereId} isPending={isPending} />
-            <div>
-              <h3 className="mb-2 text-sm font-medium text-foreground">Subjects ({subjects.length})</h3>
-              {subjects.length === 0 ? (
-                <Empty text="No subjects in this Sphere." />
-              ) : (
-                <div className="space-y-1.5">
-                  {subjects.map((s) => (
-                    <div
-                      key={s.id}
-                      className="flex items-center gap-2 rounded-lg border border-border/70 bg-card px-3 py-2"
-                    >
-                      <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                        {s.name}
-                        {s.code ? <span className="text-muted-foreground"> ({s.code})</span> : null}
-                      </span>
-                      <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
-                        {[s.degree, s.year, s.branch].filter(Boolean).join(" · ") || "General"}
-                      </span>
-                      <Button
-                        size="icon-xs"
-                        variant="ghost"
-                        aria-label={`Delete ${s.name}`}
-                        onClick={() => run(() => deleteSubjectAction(s.id), "Subject deleted")}
-                      >
-                        ×
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div>
-              <h3 className="mb-2 text-sm font-medium text-foreground">Resources ({resources.length})</h3>
-              {resources.length === 0 ? (
-                <Empty text="No resources in this Sphere." />
-              ) : (
-                <div className="space-y-2">
-                  {resources.map((r) => (
-                    <Card key={r.id} className="border-border/70 bg-card">
-                      <CardContent className="flex items-center gap-3 p-3">
-                        <p className="min-w-0 flex-1 truncate text-sm text-foreground">{r.title}</p>
-                        <Badge variant="outline" className="border-border/60 text-[10px] font-normal capitalize">
-                          {r.type}
-                        </Badge>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          disabled={isPending}
-                          onClick={() => run(() => deleteResourceAction(r.id), "Resource deleted")}
-                        >
-                          Delete
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </div>
+            <AcademicAdminSectionClient
+              sphereId={sphereId}
+              sphereName={sphereName}
+              section={{ degree: "", year: "", branch: "" }}
+              sectionLabel="Global"
+              subjects={subjects}
+              units={units}
+              chapters={chapters}
+              resources={resources}
+              calendar={calendar}
+              syllabuses={syllabuses}
+              isSuperAdminView={true}
+            />
           </TabsContent>
         )}
 

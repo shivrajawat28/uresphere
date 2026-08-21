@@ -99,6 +99,7 @@ export function AcademicAdminSectionClient({
   calendar,
   syllabuses,
   chapters,
+  isSuperAdminView,
 }: {
   sphereId: string
   sphereName: string
@@ -110,6 +111,7 @@ export function AcademicAdminSectionClient({
   calendar: CalendarEntry[]
   syllabuses: Syllabus[]
   chapters: Chapter[]
+  isSuperAdminView?: boolean
 }) {
   const [isPending, startTransition] = useTransition()
 
@@ -178,27 +180,31 @@ export function AcademicAdminSectionClient({
   const distinctBranches = Array.from(new Set([...subjects.map(s => s.branch), ...syllabuses.map(s => s.branch)].filter(Boolean))).sort()
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 md:px-8">
-      <Link
-        href="/dashboard/academic/admin"
-        className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition hover:text-primary"
-      >
-        <ArrowLeft className="size-4" aria-hidden="true" />
-        Academic Admin
-      </Link>
-
-      <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-primary">
-            <GraduationCap className="size-3.5" />
+    <div className={isSuperAdminView ? "space-y-8" : "mx-auto max-w-5xl px-4 py-8 md:px-8"}>
+      {!isSuperAdminView && (
+        <>
+          <Link
+            href="/dashboard/academic/admin"
+            className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition hover:text-primary"
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
             Academic Admin
-          </p>
-          <h1 className="text-pretty font-serif text-3xl font-semibold text-foreground">{sectionLabel}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {sphereName} — manage the subjects, units, resources and calendar for this section.
-          </p>
-        </div>
-      </div>
+          </Link>
+
+          <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-primary">
+                <GraduationCap className="size-3.5" />
+                Academic Admin
+              </p>
+              <h1 className="text-pretty font-serif text-3xl font-semibold text-foreground">{sectionLabel}</h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {sphereName} — manage the subjects, units, resources and calendar for this section.
+              </p>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Taxonomy Edit Controls */}
       <section className="mb-8 rounded-lg border border-border/70 bg-card p-4">
