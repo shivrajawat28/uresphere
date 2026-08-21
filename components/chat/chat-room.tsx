@@ -325,6 +325,8 @@ export function ChatRoom({
     formData.set("sphereId", sphereId ?? "")
     if (replyingTo) formData.set("replyToMessageId", replyingTo.id)
     setDraft("")
+    const el = document.getElementById("chat-composer")
+    if (el) el.style.height = "auto"
 
     // Optimistic bubble: the sender sees their message instantly. The temp id
     // is reconciled with the persisted row when the action resolves.
@@ -497,7 +499,7 @@ export function ChatRoom({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-3 border-b border-border px-4 py-4 md:px-8">
+      <div className="hidden md:flex items-center gap-3 border-b border-border px-4 py-4 md:px-8">
         <MessageCircle className="size-5 text-primary" />
         <div>
           <h1 className="font-serif text-lg font-medium text-foreground">{sphereName} — Live Chat</h1>
@@ -651,7 +653,7 @@ export function ChatRoom({
         </div>
       </div>
 
-      <form onSubmit={handleSend} className="border-t border-border px-4 py-4 md:px-8">
+      <form onSubmit={handleSend} className="shrink-0 bg-background border-t border-border px-4 py-4 md:px-8">
         <div className="mx-auto max-w-2xl">
           {replyTarget && (
             <div className="mb-2 flex items-start gap-2 rounded-lg border border-border/70 bg-secondary/40 px-3 py-2">
@@ -676,15 +678,23 @@ export function ChatRoom({
           )}
           <div className="flex items-end gap-2">
             <Textarea
+              id="chat-composer"
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={(e) => {
+                setDraft(e.target.value)
+                e.target.style.height = "auto"
+                e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`
+              }}
               onKeyDown={handleKeyDown}
               placeholder={replyTarget ? `Reply to ${replyTarget.authorHandle}...` : `Message ${sphereName} as ${currentHandle}...`}
               rows={1}
               maxLength={1000}
-              className="min-h-11 flex-1 resize-none bg-secondary/40"
+              className="min-h-11 max-h-[120px] flex-1 resize-none bg-secondary/40 py-2.5 overflow-y-auto"
             />
-            <Button type="submit" size="icon" disabled={isPending || !draft.trim()} aria-label="Send message">
+            <Button type="submit" size="icon" className="mb-1" disabled={isPending || !draft.trim()} aria-label="Send message" onClick={() => {
+              const el = document.getElementById("chat-composer")
+              if (el) el.style.height = "auto"
+            }}>
               <SendHorizontal className="size-4" />
             </Button>
           </div>
