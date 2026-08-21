@@ -47,7 +47,7 @@ export default async function AcademicAdminSectionPage({
   let syllabusesQuery = supabase.from("academic_syllabuses").select("id, title, degree, year, branch, pdf_url, external_url").eq("sphere_id", workspace.sphereId)
   if (section.degree) syllabusesQuery = syllabusesQuery.eq("degree", section.degree)
   if (section.year) syllabusesQuery = syllabusesQuery.eq("year", section.year)
-  if (section.branch) syllabusesQuery = syllabusesQuery.eq("branch", section.branch)
+  syllabusesQuery = syllabusesQuery.eq("branch", section.branch || "")
 
   let calendarQuery = supabase
     .from("academic_calendar")

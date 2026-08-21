@@ -195,8 +195,8 @@ export function AcademicClient({
   }, [resources, chapters, subjectId, unitId, typeFilter, query])
 
   const visibleSyllabuses = useMemo(() => {
-    return syllabuses.filter((s) => s.degree === degree && s.year === year && s.branch === branch)
-  }, [syllabuses, degree, year, branch])
+    return syllabuses.filter((s) => s.degree === degree && s.year === year && s.branch === "")
+  }, [syllabuses, degree, year])
 
   const visibleCalendar = useMemo(() => {
     return calendar.filter((c) => c.degree === degree && c.year === year)
@@ -575,14 +575,12 @@ export function AcademicClient({
       )}
 
       {/* Syllabus */}
-      {degree && year && branch && (
+      {degree && year && (
         <section className="mt-12">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-medium text-foreground">Syllabus for {degree} · {year} · {branch}</h2>
-          </div>
+          <h2 className="mb-3 text-sm font-medium text-foreground">Syllabus</h2>
           {visibleSyllabuses.length === 0 ? (
             <p className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
-              No syllabus uploaded yet.
+              No syllabus available yet.
             </p>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
