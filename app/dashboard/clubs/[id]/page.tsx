@@ -7,6 +7,7 @@ import { Users, Clock, ArrowLeft, CalendarDays, MapPin, Image as ImageIcon, Exte
 import Link from "next/link"
 import type { Metadata } from "next"
 import { ClubEventActions } from "@/components/club-event-actions"
+import { LinkifyText } from "@/components/ui/linkify-text"
 
 export const dynamic = "force-dynamic"
 
@@ -176,7 +177,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ id:
                           {event.venue || "Venue TBA"}
                           {event.organizer && ` · ${event.organizer}`}
                         </p>
-                        {event.description && <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{event.description}</p>}
+                        {event.description && <LinkifyText text={event.description} className="mt-1 text-xs text-muted-foreground line-clamp-2" />}
                         {!event.event_date ? (
                           <Badge variant="secondary" className="mt-2 gap-1"><Clock className="size-3" />Coming Soon</Badge>
                         ) : countdown ? (
@@ -222,7 +223,7 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ id:
                       {activity.event_date && <><CalendarDays className="size-3" />{activity.event_date}</>}
                       {activity.venue && <><MapPin className="size-3" />{activity.venue}</>}
                     </p>
-                    {activity.description && <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{activity.description}</p>}
+                    {activity.description && <LinkifyText text={activity.description} className="mt-1 text-xs text-muted-foreground line-clamp-2" />}
 
                     {/* Activity Gallery */}
                     {galleryItems.length > 0 && (

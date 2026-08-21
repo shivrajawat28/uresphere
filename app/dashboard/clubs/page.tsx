@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Users, ChevronRight } from "lucide-react"
 import Link from "next/link"
+import { LinkifyText } from "@/components/ui/linkify-text"
 
 export const dynamic = "force-dynamic"
 
@@ -93,7 +94,7 @@ export default async function ClubsPage() {
                   </div>
 
                   {club.description && (
-                    <p className="mb-3 text-sm leading-relaxed text-muted-foreground line-clamp-3">{club.description}</p>
+                    <LinkifyText text={club.description} className="mb-3 text-sm leading-relaxed text-muted-foreground line-clamp-3" />
                   )}
 
                   <Button asChild variant="ghost" size="sm" className="gap-1.5 px-0 text-primary">

@@ -216,26 +216,28 @@ function EventForm({ sphereId, initial, isPending, onClose, onSubmit }: {
 
   return (
     <form onSubmit={(e) => { e.preventDefault(); const fd = new FormData(e.currentTarget); fd.set("sphereId", sphereId); if (initial) fd.set("id", initial.id); if (imageUrl) fd.set("imageUrl", imageUrl); if (isComingSoon) fd.set("date", ""); startTransition(() => onSubmit(fd)) }}
-      className="mb-3 grid gap-3 rounded-lg border border-border/70 bg-secondary/20 p-4 sm:grid-cols-2">
-      <div className="space-y-1.5 sm:col-span-2"><Label>Title</Label><Input name="title" required maxLength={120} defaultValue={initial?.title ?? ""} placeholder="Tech Fest 2026" /></div>
-      <div className="flex items-center gap-2 sm:col-span-2">
-        <input type="checkbox" id="comingSoon" checked={isComingSoon} onChange={(e) => setIsComingSoon(e.target.checked)} className="size-4" />
-        <Label htmlFor="comingSoon" className="text-sm font-normal">Coming Soon — date TBA</Label>
+      className="mb-3 flex flex-col rounded-lg border border-border/70 bg-secondary/20">
+      <div className="grid gap-3 p-4 sm:grid-cols-2 max-h-[65vh] overflow-y-auto">
+        <div className="space-y-1.5 sm:col-span-2"><Label>Title</Label><Input name="title" required maxLength={120} defaultValue={initial?.title ?? ""} placeholder="Tech Fest 2026" /></div>
+        <div className="flex items-center gap-2 sm:col-span-2">
+          <input type="checkbox" id="comingSoon" checked={isComingSoon} onChange={(e) => setIsComingSoon(e.target.checked)} className="size-4" />
+          <Label htmlFor="comingSoon" className="text-sm font-normal">Coming Soon — date TBA</Label>
+        </div>
+        {!isComingSoon && (<>
+          <div className="space-y-1.5"><Label>Date</Label><Input name="date" type="date" defaultValue={initial?.event_date ?? ""} /></div>
+          <div className="space-y-1.5"><Label>Time</Label><Input name="time" type="time" defaultValue={initial?.event_time ?? ""} /></div>
+        </>)}
+        <div className="space-y-1.5"><Label>Venue</Label><Input name="venue" defaultValue={initial?.venue ?? ""} /></div>
+        <div className="space-y-1.5"><Label>Organizer</Label><Input name="organizer" defaultValue={initial?.organizer ?? ""} /></div>
+        <div className="space-y-1.5 sm:col-span-2"><Label>Description</Label><Textarea name="description" rows={2} defaultValue={initial?.description ?? ""} /></div>
+        <div className="space-y-1.5"><Label>Contact Name</Label><Input name="contactName" defaultValue={initial?.contact_name ?? ""} /></div>
+        <div className="space-y-1.5"><Label>Contact Phone</Label><Input name="contactPhone" defaultValue={initial?.contact_phone ?? ""} /></div>
+        <div className="space-y-1.5 sm:col-span-2"><Label>Contact Email</Label><Input name="contactEmail" type="email" defaultValue={initial?.contact_email ?? ""} /></div>
+        <div className="space-y-1.5 sm:col-span-2"><Label>Registration URL</Label><Input name="registrationUrl" defaultValue={initial?.registration_url ?? ""} placeholder="https://forms.google.com/..." /></div>
+        <div className="space-y-1.5"><Label>Registration Deadline</Label><Input name="registrationDeadline" type="date" defaultValue={initial?.registration_deadline ?? ""} /></div>
+        <div className="space-y-1.5 sm:col-span-2"><Label>Event image</Label><FileUpload accept="image" value={imageUrl} onChange={(v) => setImageUrl(v as string)} label="Event image" /></div>
       </div>
-      {!isComingSoon && (<>
-        <div className="space-y-1.5"><Label>Date</Label><Input name="date" type="date" defaultValue={initial?.event_date ?? ""} /></div>
-        <div className="space-y-1.5"><Label>Time</Label><Input name="time" type="time" defaultValue={initial?.event_time ?? ""} /></div>
-      </>)}
-      <div className="space-y-1.5"><Label>Venue</Label><Input name="venue" defaultValue={initial?.venue ?? ""} /></div>
-      <div className="space-y-1.5"><Label>Organizer</Label><Input name="organizer" defaultValue={initial?.organizer ?? ""} /></div>
-      <div className="space-y-1.5 sm:col-span-2"><Label>Description</Label><Textarea name="description" rows={2} defaultValue={initial?.description ?? ""} /></div>
-      <div className="space-y-1.5"><Label>Contact Name</Label><Input name="contactName" defaultValue={initial?.contact_name ?? ""} /></div>
-      <div className="space-y-1.5"><Label>Contact Phone</Label><Input name="contactPhone" defaultValue={initial?.contact_phone ?? ""} /></div>
-      <div className="space-y-1.5 sm:col-span-2"><Label>Contact Email</Label><Input name="contactEmail" type="email" defaultValue={initial?.contact_email ?? ""} /></div>
-      <div className="space-y-1.5 sm:col-span-2"><Label>Registration URL</Label><Input name="registrationUrl" defaultValue={initial?.registration_url ?? ""} placeholder="https://forms.google.com/..." /></div>
-      <div className="space-y-1.5"><Label>Registration Deadline</Label><Input name="registrationDeadline" type="date" defaultValue={initial?.registration_deadline ?? ""} /></div>
-      <div className="space-y-1.5 sm:col-span-2"><Label>Event image</Label><FileUpload accept="image" value={imageUrl} onChange={(v) => setImageUrl(v as string)} label="Event image" /></div>
-      <div className="flex gap-2 sm:col-span-2">
+      <div className="flex shrink-0 gap-2 p-4 border-t border-border/50 bg-secondary/30 rounded-b-lg">
         <Button type="submit" size="sm" disabled={busy || isPending} className="gap-2">
           {(busy || isPending) && <Loader2 className="size-3.5 animate-spin" />}{initial ? "Save changes" : "Create event"}
         </Button>

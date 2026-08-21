@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { CalendarDays, MapPin, Clock } from "lucide-react"
 import { CollegeEventActions } from "@/components/college-event-actions"
+import { LinkifyText } from "@/components/ui/linkify-text"
 
 export const dynamic = "force-dynamic"
 
@@ -128,7 +129,7 @@ export default async function EventsPage() {
           </div>
 
           {event.description && (
-            <p className="mb-3 text-sm leading-relaxed text-muted-foreground">{event.description}</p>
+            <LinkifyText text={event.description} className="mb-3 text-sm leading-relaxed text-muted-foreground" />
           )}
 
           {/* Countdown or Coming Soon */}
