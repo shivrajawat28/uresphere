@@ -686,19 +686,19 @@ export function ChatRoom({
                 e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`
               }}
               onKeyDown={handleKeyDown}
-              placeholder={replyTarget ? `Reply to ${replyTarget.authorHandle}...` : `Message ${sphereName} as ${currentHandle}...`}
+              placeholder={replyTarget ? `Reply to ${replyTarget.authorHandle}...` : `Message anonymously as ${currentHandle.startsWith('@') ? currentHandle : `@${currentHandle}`}`}
               rows={1}
               maxLength={1000}
-              className="min-h-11 max-h-[120px] flex-1 resize-none bg-secondary/40 py-2.5 overflow-y-auto"
+              className="min-h-10 max-h-[120px] flex-1 resize-none bg-secondary/40 py-2 overflow-y-auto"
             />
-            <Button type="submit" size="icon" className="mb-1" disabled={isPending || !draft.trim()} aria-label="Send message" onClick={() => {
+            <Button type="submit" size="icon" disabled={isPending || !draft.trim()} aria-label="Send message" onClick={() => {
               const el = document.getElementById("chat-composer")
               if (el) el.style.height = "auto"
             }}>
               <SendHorizontal className="size-4" />
             </Button>
           </div>
-          <p className="mt-2 text-[11px] text-muted-foreground">
+          <p className="hidden md:block mt-2 text-[11px] text-muted-foreground">
             <ShieldCheck className="mr-1 inline size-3" />
             Sent as {currentHandle}. Visible only to {sphereName}.
           </p>
