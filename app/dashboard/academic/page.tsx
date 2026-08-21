@@ -34,7 +34,7 @@ export default async function AcademicPage() {
       .order("created_at", { ascending: false }),
     supabase
       .from("academic_calendar")
-      .select("id, title, event_date, description, pdf_url, external_url")
+      .select("id, title, event_date, description, pdf_url, external_url, degree, year")
       .eq("sphere_id", member.sphereId)
       .order("event_date", { ascending: false })
       .limit(20),

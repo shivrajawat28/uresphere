@@ -260,28 +260,71 @@ export async function deleteChapterAction(chapterId: string): Promise<ActionResu
 
 export async function updateCalendarEntryAction(formData: FormData): Promise<ActionResult> {
   const supabase = await createClient()
-  const id = String(formData.get("id") ?? "")
+  const entryId = String(formData.get("id") ?? "")
   const title = String(formData.get("title") ?? "").trim()
-  const date = String(formData.get("date") ?? "")
   const description = String(formData.get("description") ?? "").trim()
-  const pdfUrl = String(formData.get("pdfUrl") ?? "").trim() || null
-  const externalUrl = String(formData.get("externalUrl") ?? "").trim() || null
+  const dateStr = String(formData.get("date") ?? "")
+  const pdfUrl = String(formData.get("pdfUrl") ?? "").trim()
+  const externalUrl = String(formData.get("externalUrl") ?? "").trim()
 
-  if (!id || title.length < 1 || !date) return { error: "Title and date are required." }
+  if (!entryId || !title || !dateStr) return { error: "Missing required fields." }
 
-  const { data: entry } = await supabase.from("academic_calendar").select("id, sphere_id").eq("id", id).maybeSingle()
-  if (!entry) return { error: "Calendar entry not found." }
+  const { data: entry } = await supabase.from("academic_calendar").select("sphere_id, degree, year").eq("id", entryId).maybeSingle()
+  if (!entry) return { error: "Entry not found." }
 
-  const gate = await requireSphereAction(entry.sphere_id, "academic.update")
+  const gate = await requireSphereAction(entry.sphere_id, "academic.update", { degree: entry.degree, year: entry.year, branch: "" })
   if (!gate.ok) return gate
 
-  const { error } = await supabase.from("academic_calendar").update({ title, event_date: date, description, pdf_url: pdfUrl, external_url: externalUrl }).eq("id", id)
+  const { error } = await supabase
+    .from("academic_calendar")
+    .update({
+      title,
+      description: description || null,
+      event_date: dateStr,
+      pdf_url: pdfUrl || null,
+      external_url: externalUrl || null,
+    })
+    .eq("id", entryId)
   if (error) return { error: "Couldn't update the calendar entry." }
 
-  await logAudit(supabase, gate.member.userId, entry.sphere_id, "calendar_entry_updated", "calendar", id)
+  await logAudit(supabase, gate.member.userId, entry.sphere_id, "calendar_entry_updated", "calendar", entryId)
   for (const p of spherePaths(entry.sphere_id)) revalidatePath(p)
   revalidatePath("/dashboard/academic")
   revalidatePath("/dashboard/academic/admin")
+  return { error: null }
+}
+
+export async function createCalendarEntryAction(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  const sphereId = String(formData.get("sphereId") ?? "")
+  const title = String(formData.get("title") ?? "").trim()
+  const description = String(formData.get("description") ?? "").trim()
+  const dateStr = String(formData.get("date") ?? "")
+  const pdfUrl = String(formData.get("pdfUrl") ?? "").trim()
+  const externalUrl = String(formData.get("externalUrl") ?? "").trim()
+  const degree = String(formData.get("degree") ?? "").trim()
+  const year = String(formData.get("year") ?? "").trim()
+
+  if (!sphereId || !title || !dateStr) return { error: "Title and date are required." }
+
+  const gate = await requireSphereAction(sphereId, "academic.create", { degree, year, branch: "" })
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("academic_calendar").insert({
+    sphere_id: sphereId,
+    degree,
+    year,
+    title,
+    description: description || null,
+    event_date: dateStr,
+    pdf_url: pdfUrl || null,
+    external_url: externalUrl || null,
+  })
+  if (error) return { error: "Couldn't add the calendar entry." }
+
+  await logAudit(supabase, gate.member.userId, sphereId, "calendar_entry_created", "calendar")
+  for (const p of spherePaths(sphereId)) revalidatePath(p)
+  revalidatePath("/dashboard/academic")
   return { error: null }
 }
 
@@ -1434,16 +1477,10 @@ export async function deleteResourceAction(resourceId: string): Promise<ActionRe
 export async function deleteCalendarEntryAction(entryId: string): Promise<ActionResult> {
   const supabase = await createClient()
 
-  const { data: entry } = await supabase
-    .from("academic_calendar")
-    .select("id, sphere_id")
-    .eq("id", entryId)
-    .maybeSingle()
-  if (!entry) return { error: "Calendar entry not found." }
+  const { data: entry } = await supabase.from("academic_calendar").select("sphere_id, degree, year").eq("id", entryId).maybeSingle()
+  if (!entry) return { error: "Entry not found." }
 
-  // Calendar is sphere-wide (no section taxonomy) — any academic manager in
-  // the Sphere may manage it, matching createCalendarEntryAction.
-  const gate = await requireSphereAction(entry.sphere_id, "academic.delete")
+  const gate = await requireSphereAction(entry.sphere_id, "academic.delete", { degree: entry.degree, year: entry.year, branch: "" })
   if (!gate.ok) return gate
 
   const { error } = await supabase.from("academic_calendar").delete().eq("id", entryId)
@@ -1456,34 +1493,6 @@ export async function deleteCalendarEntryAction(entryId: string): Promise<Action
   return { error: null }
 }
 
-export async function createCalendarEntryAction(formData: FormData): Promise<ActionResult> {
-  const supabase = await createClient()
-  const sphereId = String(formData.get("sphereId") ?? "")
-
-  const title = String(formData.get("title") ?? "").trim()
-  const date = String(formData.get("date") ?? "")
-  const description = String(formData.get("description") ?? "").trim()
-  if (!sphereId) return { error: "Missing Sphere." }
-  if (title.length < 1 || !date) return { error: "Title and date are required." }
-
-  // Calendar entries are sphere-wide; any academic manager may add one.
-  const gate = await requireSphereAction(sphereId, "academic.create")
-  if (!gate.ok) return gate
-
-  const { error } = await supabase.from("academic_calendar").insert({
-    sphere_id: sphereId,
-    title,
-    event_date: date,
-    description,
-    created_by: gate.member.userId,
-  })
-  if (error) return { error: "Couldn't add the calendar entry." }
-
-  await logAudit(supabase, gate.member.userId, sphereId, "calendar_entry_created", "calendar")
-  for (const p of spherePaths(sphereId)) revalidatePath(p)
-  revalidatePath("/dashboard/academic")
-  return { error: null }
-}
 
 // ---------------------------------------------------------------------------
 // Chat moderation (social_moderator)

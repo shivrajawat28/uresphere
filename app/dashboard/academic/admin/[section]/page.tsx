@@ -49,6 +49,13 @@ export default async function AcademicAdminSectionPage({
   if (section.year) syllabusesQuery = syllabusesQuery.eq("year", section.year)
   if (section.branch) syllabusesQuery = syllabusesQuery.eq("branch", section.branch)
 
+  let calendarQuery = supabase
+    .from("academic_calendar")
+    .select("id, title, event_date, description, pdf_url, external_url, degree, year")
+    .eq("sphere_id", workspace.sphereId)
+  if (section.degree) calendarQuery = calendarQuery.eq("degree", section.degree)
+  if (section.year) calendarQuery = calendarQuery.eq("year", section.year)
+
   const [{ data: units }, { data: resources }, { data: calendar }, { data: syllabuses }] = await Promise.all([
     subjectIds.length > 0
       ? supabase.from("academic_units").select("id, subject_id, name").in("subject_id", subjectIds).order("display_order", { ascending: true }).order("name", { ascending: true })
@@ -56,12 +63,7 @@ export default async function AcademicAdminSectionPage({
     subjectIds.length > 0
       ? supabase.from("academic_resources").select("id, title, type, url, subject_id, chapter_id, created_at").in("subject_id", subjectIds).order("created_at", { ascending: false })
       : Promise.resolve({ data: [] }),
-    supabase
-      .from("academic_calendar")
-      .select("id, title, event_date, description, pdf_url, external_url")
-      .eq("sphere_id", workspace.sphereId)
-      .order("event_date", { ascending: false })
-      .limit(50),
+    calendarQuery.order("event_date", { ascending: false }).limit(50),
     syllabusesQuery.order("created_at", { ascending: false }),
   ])
 
@@ -90,7 +92,7 @@ export default async function AcademicAdminSectionPage({
         subjectName: r.subject_id ? subjectNameMap.get(r.subject_id) ?? "General" : "General",
       }))}
       chapters={(chapters ?? []).map((c) => ({ id: c.id, unit_id: c.unit_id, name: c.name }))}
-      calendar={(calendar ?? []).map((c) => ({ id: c.id, title: c.title, event_date: c.event_date, description: c.description, pdf_url: c.pdf_url, external_url: c.external_url }))}
+      calendar={(calendar ?? []).map((c) => ({ id: c.id, title: c.title, event_date: c.event_date, description: c.description, pdf_url: c.pdf_url, external_url: c.external_url, degree: c.degree, year: c.year }))}
       syllabuses={(syllabuses ?? []).map((s) => ({ id: s.id, title: s.title, degree: s.degree, year: s.year, branch: s.branch, pdf_url: s.pdf_url, external_url: s.external_url }))}
     />
   )

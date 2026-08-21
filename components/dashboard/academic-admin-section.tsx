@@ -81,7 +81,7 @@ type Resource = {
   chapter_id: string | null
   subjectName: string
 }
-type CalendarEntry = { id: string; title: string; event_date: string; description: string; pdf_url: string | null; external_url: string | null }
+type CalendarEntry = { id: string; title: string; event_date: string; description: string; pdf_url: string | null; external_url: string | null; degree: string | null; year: string | null }
 type Syllabus = { id: string; title: string; degree: string; year: string; branch: string; pdf_url: string | null; external_url: string | null }
 type Chapter = { id: string; unit_id: string; name: string }
 
@@ -887,18 +887,20 @@ export function AcademicAdminSectionClient({
             <DialogTitle>{editingCalendarEntry ? "Edit calendar entry" : "Add a calendar entry"}</DialogTitle>
           </DialogHeader>
           <form
-            action={(formData) => {
-              formData.set("sphereId", sphereId)
-              if (calendarPdfUrl) formData.set("pdfUrl", calendarPdfUrl)
-              if (calendarExternalUrl) formData.set("externalUrl", calendarExternalUrl)
-              return run(async () => {
+            action={(formData) =>
+              run(async () => {
+                formData.set("sphereId", sphereId)
+                formData.set("degree", section.degree)
+                formData.set("year", section.year)
+                if (calendarPdfUrl) formData.set("pdfUrl", calendarPdfUrl)
+                if (calendarExternalUrl) formData.set("externalUrl", calendarExternalUrl)
                 const r = editingCalendarEntry
                   ? await updateCalendarEntryAction(formData)
                   : await createCalendarEntryAction(formData)
                 if (!r.error) setCalendarOpen(false)
                 return r
               }, editingCalendarEntry ? "Calendar updated" : "Calendar entry added")
-            }}
+            }
             className="flex flex-col gap-4"
           >
             {editingCalendarEntry && <input type="hidden" name="id" value={editingCalendarEntry.id} />}

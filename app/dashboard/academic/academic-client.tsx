@@ -79,7 +79,7 @@ type Resource = {
   unitName: string | null
 }
 type Chapter = { id: string; unit_id: string; name: string }
-type CalendarEntry = { id: string; title: string; event_date: string; description: string; pdf_url: string | null; external_url: string | null }
+type CalendarEntry = { id: string; title: string; event_date: string; description: string; pdf_url: string | null; external_url: string | null; degree: string | null; year: string | null }
 type Syllabus = { id: string; title: string; degree: string; year: string; branch: string; pdf_url: string | null; external_url: string | null }
 
 export function AcademicClient({
@@ -195,9 +195,12 @@ export function AcademicClient({
   }, [resources, chapters, subjectId, unitId, typeFilter, query])
 
   const visibleSyllabuses = useMemo(() => {
-    if (!degree || !year || !branch) return []
     return syllabuses.filter((s) => s.degree === degree && s.year === year && s.branch === branch)
   }, [syllabuses, degree, year, branch])
+
+  const visibleCalendar = useMemo(() => {
+    return calendar.filter((c) => c.degree === degree && c.year === year)
+  }, [calendar, degree, year])
 
   const crumb = [
     { label: degree || "All degrees", action: () => go({}) },
@@ -534,41 +537,42 @@ export function AcademicClient({
         </div>
       )}
 
-      {/* Calendar */}
-      <section className="mt-12">
-        <h2 className="mb-3 text-sm font-medium text-foreground">Academic calendar</h2>
-        {calendar.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
-            Nothing on the calendar yet.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {calendar.map((entry) => {
-              const url = entry.pdf_url || entry.external_url
-              return (
-                <div key={entry.id} className="flex items-start gap-3 rounded-lg border border-border/70 bg-card px-4 py-3">
-                  <BookOpen className="mt-0.5 size-4 shrink-0 text-primary" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground">{entry.title}</p>
-                    {entry.description && <p className="text-xs text-muted-foreground">{entry.description}</p>}
-                    {url && (
-                      <a href={url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center text-xs font-medium text-primary hover:underline">
-                        View resource <ChevronRight className="ml-0.5 size-3" />
-                      </a>
-                    )}
+      {degree && year && (
+        <section className="mt-12">
+          <h2 className="mb-3 text-sm font-medium text-foreground">Academic calendar for {degree} · {year}</h2>
+          {visibleCalendar.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
+              Nothing on the calendar yet.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {visibleCalendar.map((entry) => {
+                const url = entry.pdf_url || entry.external_url
+                return (
+                  <div key={entry.id} className="flex items-start gap-3 rounded-lg border border-border/70 bg-card px-4 py-3">
+                    <BookOpen className="mt-0.5 size-4 shrink-0 text-primary" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">{entry.title}</p>
+                      {entry.description && <p className="text-xs text-muted-foreground">{entry.description}</p>}
+                      {url && (
+                        <a href={url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center text-xs font-medium text-primary hover:underline">
+                          View resource <ChevronRight className="ml-0.5 size-3" />
+                        </a>
+                      )}
+                    </div>
+                    <Badge variant="outline" className="ml-auto shrink-0 border-border/60 font-normal text-muted-foreground">
+                      {new Date(`${entry.event_date}T00:00:00`).toLocaleDateString("en-IN", {
+                        day: "numeric",
+                        month: "short",
+                      })}
+                    </Badge>
                   </div>
-                  <Badge variant="outline" className="ml-auto shrink-0 border-border/60 font-normal text-muted-foreground">
-                    {new Date(`${entry.event_date}T00:00:00`).toLocaleDateString("en-IN", {
-                      day: "numeric",
-                      month: "short",
-                    })}
-                  </Badge>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </section>
+                )
+              })}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Syllabus */}
       {degree && year && branch && (
