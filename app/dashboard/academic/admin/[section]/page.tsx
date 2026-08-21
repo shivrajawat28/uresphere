@@ -44,20 +44,31 @@ export default async function AcademicAdminSectionPage({
   const { data: subjects } = await subjectsQuery.order("name", { ascending: true })
 
   const subjectIds = (subjects ?? []).map((s) => s.id)
-  const [{ data: units }, { data: resources }, { data: calendar }] = await Promise.all([
+  let syllabusesQuery = supabase.from("academic_syllabuses").select("id, title, degree, year, branch, pdf_url, external_url").eq("sphere_id", workspace.sphereId)
+  if (section.degree) syllabusesQuery = syllabusesQuery.eq("degree", section.degree)
+  if (section.year) syllabusesQuery = syllabusesQuery.eq("year", section.year)
+  if (section.branch) syllabusesQuery = syllabusesQuery.eq("branch", section.branch)
+
+  const [{ data: units }, { data: resources }, { data: calendar }, { data: syllabuses }] = await Promise.all([
     subjectIds.length > 0
       ? supabase.from("academic_units").select("id, subject_id, name").in("subject_id", subjectIds).order("display_order", { ascending: true }).order("name", { ascending: true })
       : Promise.resolve({ data: [] }),
     subjectIds.length > 0
-      ? supabase.from("academic_resources").select("id, title, type, url, subject_id, created_at").in("subject_id", subjectIds).order("created_at", { ascending: false })
+      ? supabase.from("academic_resources").select("id, title, type, url, subject_id, chapter_id, created_at").in("subject_id", subjectIds).order("created_at", { ascending: false })
       : Promise.resolve({ data: [] }),
     supabase
       .from("academic_calendar")
-      .select("id, title, event_date, description")
+      .select("id, title, event_date, description, pdf_url, external_url")
       .eq("sphere_id", workspace.sphereId)
       .order("event_date", { ascending: false })
       .limit(50),
+    syllabusesQuery.order("created_at", { ascending: false }),
   ])
+
+  const unitIds = (units ?? []).map((u) => u.id)
+  const { data: chapters } = unitIds.length > 0 
+    ? await supabase.from("academic_chapters").select("id, unit_id, name").in("unit_id", unitIds).order("display_order", { ascending: true }).order("name", { ascending: true })
+    : { data: [] }
 
   const subjectNameMap = new Map((subjects ?? []).map((s) => [s.id, s.name]))
 
@@ -75,9 +86,12 @@ export default async function AcademicAdminSectionPage({
         type: r.type,
         url: r.url,
         subject_id: r.subject_id,
+        chapter_id: r.chapter_id,
         subjectName: r.subject_id ? subjectNameMap.get(r.subject_id) ?? "General" : "General",
       }))}
-      calendar={(calendar ?? []).map((c) => ({ id: c.id, title: c.title, event_date: c.event_date, description: c.description }))}
+      chapters={(chapters ?? []).map((c) => ({ id: c.id, unit_id: c.unit_id, name: c.name }))}
+      calendar={(calendar ?? []).map((c) => ({ id: c.id, title: c.title, event_date: c.event_date, description: c.description, pdf_url: c.pdf_url, external_url: c.external_url }))}
+      syllabuses={(syllabuses ?? []).map((s) => ({ id: s.id, title: s.title, degree: s.degree, year: s.year, branch: s.branch, pdf_url: s.pdf_url, external_url: s.external_url }))}
     />
   )
 }

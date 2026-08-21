@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useTransition } from "react"
+import { useState, useRef, useTransition, useMemo } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   createSubjectAction,
@@ -8,6 +8,9 @@ import {
   uploadResourceAction,
   deleteResourceAction,
   createCalendarEntryAction,
+  updateDegreeAction,
+  updateYearAction,
+  updateBranchAction,
 } from "@/lib/actions/admin"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -46,6 +49,7 @@ import {
   AlertCircle,
   FileUp,
   Loader2,
+  Pencil,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -69,25 +73,32 @@ type Resource = {
   url: string
   subject_id: string | null
   unit_id: string | null
+  chapter_id: string | null
   created_at: string
   subjectName: string
   unitName: string | null
 }
-type CalendarEntry = { id: string; title: string; event_date: string; description: string }
+type Chapter = { id: string; unit_id: string; name: string }
+type CalendarEntry = { id: string; title: string; event_date: string; description: string; pdf_url: string | null; external_url: string | null }
+type Syllabus = { id: string; title: string; degree: string; year: string; branch: string; pdf_url: string | null; external_url: string | null }
 
 export function AcademicClient({
   member,
   subjects,
   units,
+  chapters,
   resources,
   calendar,
+  syllabuses,
   ads,
 }: {
   member: { role: string; sphereId: string | null }
   subjects: Subject[]
   units: Unit[]
+  chapters: Chapter[]
   resources: Resource[]
   calendar: CalendarEntry[]
+  syllabuses: Syllabus[]
   ads: AdCampaign[]
 }) {
   const isAdmin = member.role === "admin" || member.role === "super_admin"
@@ -98,6 +109,9 @@ export function AcademicClient({
   const [unitOpen, setUnitOpen] = useState(false)
   const [unitSubjectId, setUnitSubjectId] = useState<string>("")
   const [calendarOpen, setCalendarOpen] = useState(false)
+  const [editingDegree, setEditingDegree] = useState<string | null>(null)
+  const [editingYear, setEditingYear] = useState<string | null>(null)
+  const [editingBranch, setEditingBranch] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
   // --- Drill-down state lives in the URL (query params) so browser Back,
@@ -165,16 +179,25 @@ export function AcademicClient({
   const selectedSubject = subjectsForBranch.find((s) => s.id === subjectId)
   const unitsForSubject = units.filter((u) => u.subject_id === subjectId)
 
-  const visibleResources = resources.filter((r) => {
-    if (subjectId) {
-      if (r.subject_id !== subjectId) return false
-      if (unitId && r.unit_id !== unitId) return false
-    }
-    const q = query.trim().toLowerCase()
-    const matchesQuery = q.length === 0 || r.title.toLowerCase().includes(q) || r.subjectName.toLowerCase().includes(q)
-    const matchesType = typeFilter === "all" || r.type === typeFilter
-    return matchesQuery && matchesType
-  })
+  const visibleResources = useMemo(() => {
+    let r = resources.filter((res) => res.subject_id === subjectId)
+    if (unitId) r = r.filter((res) => {
+      // If the resource has a chapter, check if that chapter belongs to the selected unit
+      if (res.chapter_id) {
+        const chapter = chapters.find(c => c.id === res.chapter_id)
+        return chapter?.unit_id === unitId
+      }
+      return res.unit_id === unitId
+    })
+    if (typeFilter !== "all") r = r.filter((res) => res.type === typeFilter)
+    if (query) r = r.filter((res) => res.title.toLowerCase().includes(query.toLowerCase()))
+    return r
+  }, [resources, chapters, subjectId, unitId, typeFilter, query])
+
+  const visibleSyllabuses = useMemo(() => {
+    if (!degree || !year || !branch) return []
+    return syllabuses.filter((s) => s.degree === degree && s.year === year && s.branch === branch)
+  }, [syllabuses, degree, year, branch])
 
   const crumb = [
     { label: degree || "All degrees", action: () => go({}) },
@@ -270,7 +293,21 @@ export function AcademicClient({
                   className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm active:scale-[0.98] active:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 >
                   <span className="font-serif text-lg text-foreground">{d}</span>
-                  <ChevronRight className="size-4 text-muted-foreground transition group-hover:text-primary" />
+                  <div className="flex items-center gap-1.5">
+                    {isAdmin && (
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setEditingDegree(d)
+                        }}
+                        className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-primary"
+                        aria-label={`Edit ${d}`}
+                      >
+                        <Pencil className="size-3.5" />
+                      </span>
+                    )}
+                    <ChevronRight className="size-4 text-muted-foreground transition group-hover:text-primary" />
+                  </div>
                 </button>
               ))}
             </div>
@@ -292,7 +329,21 @@ export function AcademicClient({
                   className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm active:scale-[0.98] active:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 >
                   <span className="font-medium text-foreground">{y}</span>
-                  <ChevronRight className="size-4 text-muted-foreground transition group-hover:text-primary" />
+                  <div className="flex items-center gap-1.5">
+                    {isAdmin && (
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setEditingYear(y)
+                        }}
+                        className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-primary"
+                        aria-label={`Edit ${y}`}
+                      >
+                        <Pencil className="size-3.5" />
+                      </span>
+                    )}
+                    <ChevronRight className="size-4 text-muted-foreground transition group-hover:text-primary" />
+                  </div>
                 </button>
               ))}
           </div>
@@ -313,7 +364,21 @@ export function AcademicClient({
                   className="group flex items-center justify-between rounded-lg border border-border/70 bg-card p-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm active:scale-[0.98] active:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 >
                   <span className="font-medium text-foreground">{b}</span>
-                  <ChevronRight className="size-4 text-muted-foreground transition group-hover:text-primary" />
+                  <div className="flex items-center gap-1.5">
+                    {isAdmin && (
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setEditingBranch(b)
+                        }}
+                        className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-primary"
+                        aria-label={`Edit ${b}`}
+                      >
+                        <Pencil className="size-3.5" />
+                      </span>
+                    )}
+                    <ChevronRight className="size-4 text-muted-foreground transition group-hover:text-primary" />
+                  </div>
                 </button>
               ))}
           </div>
@@ -478,26 +543,174 @@ export function AcademicClient({
           </p>
         ) : (
           <div className="space-y-2">
-            {calendar.map((entry) => (
-              <div key={entry.id} className="flex items-start gap-3 rounded-lg border border-border/70 bg-card px-4 py-3">
-                <BookOpen className="mt-0.5 size-4 shrink-0 text-primary" />
-                <div>
-                  <p className="text-sm font-medium text-foreground">{entry.title}</p>
-                  {entry.description && <p className="text-xs text-muted-foreground">{entry.description}</p>}
+            {calendar.map((entry) => {
+              const url = entry.pdf_url || entry.external_url
+              return (
+                <div key={entry.id} className="flex items-start gap-3 rounded-lg border border-border/70 bg-card px-4 py-3">
+                  <BookOpen className="mt-0.5 size-4 shrink-0 text-primary" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground">{entry.title}</p>
+                    {entry.description && <p className="text-xs text-muted-foreground">{entry.description}</p>}
+                    {url && (
+                      <a href={url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center text-xs font-medium text-primary hover:underline">
+                        View resource <ChevronRight className="ml-0.5 size-3" />
+                      </a>
+                    )}
+                  </div>
+                  <Badge variant="outline" className="ml-auto shrink-0 border-border/60 font-normal text-muted-foreground">
+                    {new Date(`${entry.event_date}T00:00:00`).toLocaleDateString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                    })}
+                  </Badge>
                 </div>
-                <Badge variant="outline" className="ml-auto shrink-0 border-border/60 font-normal text-muted-foreground">
-                  {new Date(`${entry.event_date}T00:00:00`).toLocaleDateString("en-IN", {
-                    day: "numeric",
-                    month: "short",
-                  })}
-                </Badge>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </section>
 
+      {/* Syllabus */}
+      {degree && year && branch && (
+        <section className="mt-12">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-medium text-foreground">Syllabus for {degree} · {year} · {branch}</h2>
+          </div>
+          {visibleSyllabuses.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
+              No syllabus uploaded yet.
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {visibleSyllabuses.map((s) => {
+                const url = s.pdf_url || s.external_url || "#"
+                return (
+                  <a
+                    key={s.id}
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group/resource flex items-center gap-3 rounded-xl border border-border/70 bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm"
+                  >
+                    <FileText className="size-5 shrink-0 text-primary transition-transform group-hover/resource:scale-110" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-foreground transition-colors group-hover/resource:text-primary">{s.title}</p>
+                      <p className="text-xs text-muted-foreground">Syllabus</p>
+                    </div>
+                  </a>
+                )
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
       {/* Upload resource */}
+      <Dialog open={editingDegree !== null} onOpenChange={(open) => { if (!open) setEditingDegree(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Degree</DialogTitle>
+            <DialogDescription>Rename this degree for all associated subjects.</DialogDescription>
+          </DialogHeader>
+          <form
+            action={(formData) =>
+              run(() => {
+                formData.set("sphereId", member.sphereId ?? "")
+                formData.set("oldDegree", editingDegree ?? "")
+                const p = updateDegreeAction(formData)
+                return p.then((r) => {
+                  if (!r.error) setEditingDegree(null)
+                  return r
+                })
+              }, "Degree updated")
+            }
+            className="flex flex-col gap-4"
+          >
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="newDegree">Degree Name</Label>
+              <Input id="newDegree" name="newDegree" required defaultValue={editingDegree ?? ""} />
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="ghost">Cancel</Button>
+              </DialogClose>
+              <Button type="submit" disabled={isPending}>Save changes</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editingYear !== null} onOpenChange={(open) => { if (!open) setEditingYear(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Year</DialogTitle>
+            <DialogDescription>Rename this year in {degree}.</DialogDescription>
+          </DialogHeader>
+          <form
+            action={(formData) =>
+              run(() => {
+                formData.set("sphereId", member.sphereId ?? "")
+                formData.set("degree", degree)
+                formData.set("oldYear", editingYear ?? "")
+                const p = updateYearAction(formData)
+                return p.then((r) => {
+                  if (!r.error) setEditingYear(null)
+                  return r
+                })
+              }, "Year updated")
+            }
+            className="flex flex-col gap-4"
+          >
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="newYear">Year Name</Label>
+              <Input id="newYear" name="newYear" required defaultValue={editingYear ?? ""} />
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="ghost">Cancel</Button>
+              </DialogClose>
+              <Button type="submit" disabled={isPending}>Save changes</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editingBranch !== null} onOpenChange={(open) => { if (!open) setEditingBranch(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Branch</DialogTitle>
+            <DialogDescription>Rename this branch in {degree} · {year}.</DialogDescription>
+          </DialogHeader>
+          <form
+            action={(formData) =>
+              run(() => {
+                formData.set("sphereId", member.sphereId ?? "")
+                formData.set("degree", degree)
+                formData.set("year", year)
+                formData.set("oldBranch", editingBranch ?? "")
+                const p = updateBranchAction(formData)
+                return p.then((r) => {
+                  if (!r.error) setEditingBranch(null)
+                  return r
+                })
+              }, "Branch updated")
+            }
+            className="flex flex-col gap-4"
+          >
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="newBranch">Branch Name</Label>
+              <Input id="newBranch" name="newBranch" required defaultValue={editingBranch ?? ""} />
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="ghost">Cancel</Button>
+              </DialogClose>
+              <Button type="submit" disabled={isPending}>Save changes</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       <UploadResourceDialog
         open={uploadOpen}
         onOpenChange={setUploadOpen}

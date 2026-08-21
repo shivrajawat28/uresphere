@@ -10,7 +10,15 @@ export default async function AcademicPage() {
   const member = await requireMember()
   const supabase = await createClient()
 
-  const [{ data: subjects }, { data: resources }, { data: calendar }, { data: units }, ads] = await Promise.all([
+  const [
+    { data: subjects },
+    { data: resources },
+    { data: calendar },
+    { data: units },
+    { data: chapters },
+    { data: syllabuses },
+    ads,
+  ] = await Promise.all([
     supabase
       .from("subjects")
       .select("id, name, code, degree, year, branch")
@@ -21,12 +29,12 @@ export default async function AcademicPage() {
       .order("name", { ascending: true }),
     supabase
       .from("academic_resources")
-      .select("id, title, type, url, subject_id, unit_id, created_at")
+      .select("id, title, type, url, subject_id, unit_id, chapter_id, created_at")
       .eq("sphere_id", member.sphereId)
       .order("created_at", { ascending: false }),
     supabase
       .from("academic_calendar")
-      .select("id, title, event_date, description")
+      .select("id, title, event_date, description, pdf_url, external_url")
       .eq("sphere_id", member.sphereId)
       .order("event_date", { ascending: false })
       .limit(20),
@@ -35,6 +43,15 @@ export default async function AcademicPage() {
       .select("id, subject_id, name")
       .eq("sphere_id", member.sphereId)
       .order("display_order", { ascending: true }),
+    supabase
+      .from("academic_chapters")
+      .select("id, unit_id, name")
+      .eq("sphere_id", member.sphereId)
+      .order("display_order", { ascending: true }),
+    supabase
+      .from("academic_syllabuses")
+      .select("id, title, degree, year, branch, pdf_url, external_url")
+      .eq("sphere_id", member.sphereId),
     // Live Academic placement only — filtered in the database.
     fetchLiveAds(supabase, "academic", 2),
   ])
@@ -58,8 +75,10 @@ export default async function AcademicPage() {
       }
       subjects={subjects ?? []}
       units={units ?? []}
+      chapters={chapters ?? []}
       resources={resourcesWithSubject}
       calendar={calendar ?? []}
+      syllabuses={syllabuses ?? []}
       ads={ads}
     />
   )

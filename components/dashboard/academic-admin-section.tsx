@@ -7,12 +7,20 @@ import {
   updateSubjectAction,
   deleteSubjectAction,
   createUnitAction,
+  updateUnitAction,
   deleteUnitAction,
   uploadResourceAction,
   updateResourceAction,
   deleteResourceAction,
   createCalendarEntryAction,
+  updateCalendarEntryAction,
   deleteCalendarEntryAction,
+  createSyllabusAction,
+  updateSyllabusAction,
+  deleteSyllabusAction,
+  createChapterAction,
+  updateChapterAction,
+  deleteChapterAction,
 } from "@/lib/actions/admin"
 import type { AcademicSection } from "@/lib/academic"
 import { Button } from "@/components/ui/button"
@@ -70,9 +78,12 @@ type Resource = {
   type: string
   url: string
   subject_id: string | null
+  chapter_id: string | null
   subjectName: string
 }
-type CalendarEntry = { id: string; title: string; event_date: string; description: string }
+type CalendarEntry = { id: string; title: string; event_date: string; description: string; pdf_url: string | null; external_url: string | null }
+type Syllabus = { id: string; title: string; degree: string; year: string; branch: string; pdf_url: string | null; external_url: string | null }
+type Chapter = { id: string; unit_id: string; name: string }
 
 export function AcademicAdminSectionClient({
   sphereId,
@@ -83,6 +94,8 @@ export function AcademicAdminSectionClient({
   units,
   resources,
   calendar,
+  syllabuses,
+  chapters,
 }: {
   sphereId: string
   sphereName: string
@@ -92,6 +105,8 @@ export function AcademicAdminSectionClient({
   units: Unit[]
   resources: Resource[]
   calendar: CalendarEntry[]
+  syllabuses: Syllabus[]
+  chapters: Chapter[]
 }) {
   const [isPending, startTransition] = useTransition()
 
@@ -101,16 +116,32 @@ export function AcademicAdminSectionClient({
 
   // Unit dialog state
   const [unitOpen, setUnitOpen] = useState(false)
+  const [editingUnit, setEditingUnit] = useState<Unit | null>(null)
   const [unitSubjectId, setUnitSubjectId] = useState<string>("")
 
   // Resource state
   const [uploadOpen, setUploadOpen] = useState(false)
   const [editingResource, setEditingResource] = useState<Resource | null>(null)
   const [resourceSubjectId, setResourceSubjectId] = useState<string>("")
+  const [resourceChapterId, setResourceChapterId] = useState<string>("")
   const [resourceUrl, setResourceUrl] = useState("")
 
   // Calendar state
   const [calendarOpen, setCalendarOpen] = useState(false)
+  const [editingCalendarEntry, setEditingCalendarEntry] = useState<CalendarEntry | null>(null)
+  const [calendarPdfUrl, setCalendarPdfUrl] = useState("")
+  const [calendarExternalUrl, setCalendarExternalUrl] = useState("")
+
+  // Syllabus state
+  const [syllabusOpen, setSyllabusOpen] = useState(false)
+  const [editingSyllabus, setEditingSyllabus] = useState<Syllabus | null>(null)
+  const [syllabusPdfUrl, setSyllabusPdfUrl] = useState("")
+  const [syllabusExternalUrl, setSyllabusExternalUrl] = useState("")
+
+  // Chapter state
+  const [chapterOpen, setChapterOpen] = useState(false)
+  const [editingChapter, setEditingChapter] = useState<Chapter | null>(null)
+  const [chapterUnitId, setChapterUnitId] = useState<string>("")
 
   const defaultSubjectId = subjects[0]?.id ?? ""
   const effectiveUnitSubject = unitSubjectId || defaultSubjectId
@@ -238,6 +269,7 @@ export function AcademicAdminSectionClient({
               variant="outline"
               className="gap-1.5"
               onClick={() => {
+                setEditingUnit(null)
                 setUnitSubjectId(effectiveUnitSubject)
                 setUnitOpen(true)
               }}
@@ -272,28 +304,168 @@ export function AcademicAdminSectionClient({
                 No units yet.
               </p>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {unitsOfSubject.map((u) => (
-                  <span
-                    key={u.id}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card px-3 py-1 text-xs text-foreground"
-                  >
-                    {u.name}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (confirm(`Delete unit "${u.name}"?`)) run(() => deleteUnitAction(u.id), "Unit deleted")
-                      }}
-                      disabled={isPending}
-                      className="text-muted-foreground transition hover:text-destructive"
-                      aria-label={`Delete unit ${u.name}`}
-                    >
-                      <Trash2 className="size-3" />
-                    </button>
-                  </span>
-                ))}
+              <div className="grid gap-3 sm:grid-cols-2">
+                {unitsOfSubject.map((u) => {
+                  const chaptersOfUnit = chapters.filter((c) => c.unit_id === u.id)
+                  return (
+                    <Card key={u.id} className="border-border/70 bg-card">
+                      <div className="flex items-start justify-between gap-2 border-b border-border/40 p-3 pb-2">
+                        <div className="font-medium text-sm text-foreground">{u.name}</div>
+                        <div className="flex shrink-0 gap-1">
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            className="h-6 w-6"
+                            onClick={() => {
+                              setEditingUnit(u)
+                              setUnitSubjectId(u.subject_id)
+                              setUnitOpen(true)
+                            }}
+                          >
+                            <Pencil className="size-3" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                            onClick={() => {
+                              if (confirm(`Delete unit "${u.name}"?`)) run(() => deleteUnitAction(u.id), "Unit deleted")
+                            }}
+                          >
+                            <Trash2 className="size-3" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="p-3 pt-2">
+                        <div className="mb-2 flex items-center justify-between text-xs font-medium text-muted-foreground">
+                          <span>Chapters</span>
+                          <Button
+                            variant="link"
+                            className="h-auto p-0 text-xs text-primary"
+                            onClick={() => {
+                              setEditingChapter(null)
+                              setChapterUnitId(u.id)
+                              setChapterOpen(true)
+                            }}
+                          >
+                            + Add chapter
+                          </Button>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {chaptersOfUnit.map((c) => (
+                            <span
+                              key={c.id}
+                              className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-secondary/30 px-2 py-0.5 text-xs text-foreground"
+                            >
+                              {c.name}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingChapter(c)
+                                  setChapterUnitId(c.unit_id)
+                                  setChapterOpen(true)
+                                }}
+                                className="text-muted-foreground transition hover:text-primary"
+                              >
+                                <Pencil className="size-2.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (confirm(`Delete chapter "${c.name}"?`)) run(() => deleteChapterAction(c.id), "Chapter deleted")
+                                }}
+                                className="text-muted-foreground transition hover:text-destructive"
+                              >
+                                <Trash2 className="size-2.5" />
+                              </button>
+                            </span>
+                          ))}
+                          {chaptersOfUnit.length === 0 && <span className="text-xs italic text-muted-foreground">No chapters</span>}
+                        </div>
+                      </div>
+                    </Card>
+                  )
+                })}
               </div>
             )}
+          </div>
+        )}
+      </section>
+
+      {/* Syllabuses */}
+      <section className="mb-8">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <BookOpen className="size-4 text-primary" aria-hidden="true" />
+            Syllabus (Yearly)
+          </h2>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => {
+              setEditingSyllabus(null)
+              setSyllabusPdfUrl("")
+              setSyllabusExternalUrl("")
+              setSyllabusOpen(true)
+            }}
+          >
+            <Plus className="size-3.5" />
+            Upload syllabus
+          </Button>
+        </div>
+        {syllabuses.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-border py-6 text-center text-sm text-muted-foreground">
+            No syllabuses for this section yet.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {syllabuses.map((s) => (
+              <Card key={s.id} className="border-border/70 bg-card">
+                <CardContent className="flex items-center justify-between gap-3 p-3">
+                  <a
+                    href={s.pdf_url || s.external_url || "#"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex min-w-0 items-center gap-3"
+                  >
+                    <BookOpen className="size-4 shrink-0 text-primary" />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground hover:underline">{s.title}</p>
+                      <p className="text-xs text-muted-foreground">{[s.degree, s.year, s.branch].filter(Boolean).join(" · ")}</p>
+                    </div>
+                  </a>
+                  <div className="flex shrink-0 gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isPending}
+                      onClick={() => {
+                        setEditingSyllabus(s)
+                        setSyllabusPdfUrl(s.pdf_url ?? "")
+                        setSyllabusExternalUrl(s.external_url ?? "")
+                        setSyllabusOpen(true)
+                      }}
+                      aria-label={`Edit ${s.title}`}
+                    >
+                      <Pencil className="size-3" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-muted-foreground hover:text-destructive"
+                      disabled={isPending}
+                      onClick={() => {
+                        if (confirm(`Delete syllabus "${s.title}"?`)) run(() => deleteSyllabusAction(s.id), "Syllabus deleted")
+                      }}
+                      aria-label={`Delete ${s.title}`}
+                    >
+                      <Trash2 className="size-3" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         )}
       </section>
@@ -369,6 +541,8 @@ export function AcademicAdminSectionClient({
                           disabled={isPending}
                           onClick={() => {
                             setEditingResource(r)
+                            setResourceSubjectId(r.subject_id ?? "")
+                            setResourceChapterId(r.chapter_id ?? "")
                             setResourceUrl(r.url)
                             setUploadOpen(true)
                           }}
@@ -405,7 +579,12 @@ export function AcademicAdminSectionClient({
             <CalendarDays className="size-4 text-primary" aria-hidden="true" />
             Academic calendar
           </h2>
-          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setCalendarOpen(true)}>
+          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => {
+            setEditingCalendarEntry(null)
+            setCalendarPdfUrl("")
+            setCalendarExternalUrl("")
+            setCalendarOpen(true)
+          }}>
             <Plus className="size-3.5" />
             Add entry
           </Button>
@@ -426,18 +605,34 @@ export function AcademicAdminSectionClient({
                 <Badge variant="outline" className="shrink-0 border-border/60 font-normal text-muted-foreground">
                   {new Date(`${entry.event_date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
                 </Badge>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="shrink-0 text-muted-foreground hover:text-destructive"
-                  disabled={isPending}
-                  onClick={() => {
-                    if (confirm(`Delete calendar entry "${entry.title}"?`)) run(() => deleteCalendarEntryAction(entry.id), "Entry deleted")
-                  }}
-                  aria-label={`Delete ${entry.title}`}
-                >
-                  <Trash2 className="size-3" />
-                </Button>
+                <div className="flex shrink-0 gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isPending}
+                    onClick={() => {
+                      setEditingCalendarEntry(entry)
+                      setCalendarPdfUrl(entry.pdf_url ?? "")
+                      setCalendarExternalUrl(entry.external_url ?? "")
+                      setCalendarOpen(true)
+                    }}
+                    aria-label={`Edit ${entry.title}`}
+                  >
+                    <Pencil className="size-3" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                    disabled={isPending}
+                    onClick={() => {
+                      if (confirm(`Delete entry "${entry.title}"?`)) run(() => deleteCalendarEntryAction(entry.id), "Calendar entry deleted")
+                    }}
+                    aria-label={`Delete ${entry.title}`}
+                  >
+                    <Trash2 className="size-3" />
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
@@ -529,23 +724,26 @@ export function AcademicAdminSectionClient({
       <Dialog open={unitOpen} onOpenChange={setUnitOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add a unit</DialogTitle>
-            <DialogDescription>Units break a subject into parts (e.g. Unit 1, Unit 2).</DialogDescription>
+            <DialogTitle>{editingUnit ? "Edit unit" : "Add a unit"}</DialogTitle>
+            <DialogDescription>{editingUnit ? "Update this unit's name." : "Units break a subject into parts (e.g. Unit 1, Unit 2)."}</DialogDescription>
           </DialogHeader>
           <form
             action={(formData) =>
               run(async () => {
-                formData.set("subjectId", effectiveUnitSubject)
-                const r = await createUnitAction(formData)
+                formData.set("subjectId", unitSubjectId)
+                const r = editingUnit
+                  ? await updateUnitAction(formData)
+                  : await createUnitAction(formData)
                 if (!r.error) setUnitOpen(false)
                 return r
-              }, "Unit added")
+              }, editingUnit ? "Unit updated" : "Unit added")
             }
             className="flex flex-col gap-4"
           >
+            {editingUnit && <input type="hidden" name="id" value={editingUnit.id} />}
             <div className="flex flex-col gap-2">
               <Label htmlFor="acUnitName">Unit name</Label>
-              <Input id="acUnitName" name="name" required placeholder="Unit 1 — Arrays" />
+              <Input id="acUnitName" name="name" required defaultValue={editingUnit?.name ?? ""} placeholder="Unit 1 — Arrays" />
             </div>
             <DialogFooter>
               <DialogClose asChild>
@@ -554,8 +752,42 @@ export function AcademicAdminSectionClient({
                 </Button>
               </DialogClose>
               <Button type="submit" disabled={isPending}>
-                Add unit
+                {editingUnit ? "Save changes" : "Add unit"}
               </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Chapter add / edit */}
+      <Dialog open={chapterOpen} onOpenChange={setChapterOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingChapter ? "Edit chapter" : "Add a chapter"}</DialogTitle>
+          </DialogHeader>
+          <form
+            action={(formData) =>
+              run(async () => {
+                formData.set("unitId", chapterUnitId)
+                const r = editingChapter
+                  ? await updateChapterAction(formData)
+                  : await createChapterAction(formData)
+                if (!r.error) setChapterOpen(false)
+                return r
+              }, editingChapter ? "Chapter updated" : "Chapter added")
+            }
+            className="flex flex-col gap-4"
+          >
+            {editingChapter && <input type="hidden" name="id" value={editingChapter.id} />}
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="acChapterName">Chapter name</Label>
+              <Input id="acChapterName" name="name" required defaultValue={editingChapter?.name ?? ""} placeholder="Introduction to Arrays" />
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="ghost">Cancel</Button>
+              </DialogClose>
+              <Button type="submit" disabled={isPending}>{editingChapter ? "Save changes" : "Add chapter"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -573,7 +805,8 @@ export function AcademicAdminSectionClient({
           <form
             action={(formData) => {
               formData.set("sphereId", sphereId)
-              formData.set("subjectId", editingResource?.subject_id ?? effectiveResourceSubject)
+              formData.set("subjectId", resourceSubjectId || effectiveResourceSubject)
+              if (resourceChapterId && resourceChapterId !== "none") formData.set("chapterId", resourceChapterId)
               if (resourceUrl) formData.set("url", resourceUrl)
               return run(async () => {
                 const r = editingResource
@@ -605,6 +838,24 @@ export function AcademicAdminSectionClient({
                 </SelectContent>
               </Select>
             </div>
+            
+            <div className="flex flex-col gap-2">
+              <Label>Chapter (Optional)</Label>
+              <Select value={resourceChapterId} onValueChange={(v) => setResourceChapterId(v ?? "")}>
+                <SelectTrigger>
+                  <SelectValue placeholder="No chapter (General subject resource)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">General (No chapter)</SelectItem>
+                  {chapters.filter((c) => units.some((u) => u.id === c.unit_id && u.subject_id === (resourceSubjectId || effectiveResourceSubject))).map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="flex flex-col gap-2">
               <Label>File (PDF, notes, images)</Label>
               <FileUpload
@@ -633,30 +884,48 @@ export function AcademicAdminSectionClient({
       <Dialog open={calendarOpen} onOpenChange={setCalendarOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add a calendar entry</DialogTitle>
+            <DialogTitle>{editingCalendarEntry ? "Edit calendar entry" : "Add a calendar entry"}</DialogTitle>
           </DialogHeader>
           <form
-            action={(formData) =>
-              run(async () => {
-                formData.set("sphereId", sphereId)
-                const r = await createCalendarEntryAction(formData)
+            action={(formData) => {
+              formData.set("sphereId", sphereId)
+              if (calendarPdfUrl) formData.set("pdfUrl", calendarPdfUrl)
+              if (calendarExternalUrl) formData.set("externalUrl", calendarExternalUrl)
+              return run(async () => {
+                const r = editingCalendarEntry
+                  ? await updateCalendarEntryAction(formData)
+                  : await createCalendarEntryAction(formData)
                 if (!r.error) setCalendarOpen(false)
                 return r
-              }, "Calendar updated")
-            }
+              }, editingCalendarEntry ? "Calendar updated" : "Calendar entry added")
+            }}
             className="flex flex-col gap-4"
           >
+            {editingCalendarEntry && <input type="hidden" name="id" value={editingCalendarEntry.id} />}
             <div className="flex flex-col gap-2">
               <Label htmlFor="acCalTitle">Title</Label>
-              <Input id="acCalTitle" name="title" required placeholder="Mid-semester exams" />
+              <Input id="acCalTitle" name="title" required defaultValue={editingCalendarEntry?.title ?? ""} placeholder="Mid-semester exams" />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="acCalDate">Date</Label>
-              <Input id="acCalDate" name="date" type="date" required />
+              <Input id="acCalDate" name="date" type="date" required defaultValue={editingCalendarEntry?.event_date ?? ""} />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="acCalDesc">Description (optional)</Label>
-              <Textarea id="acCalDesc" name="description" rows={2} />
+              <Textarea id="acCalDesc" name="description" rows={2} defaultValue={editingCalendarEntry?.description ?? ""} />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>Attachment (PDF or Image)</Label>
+              <FileUpload
+                accept="image,pdf"
+                value={calendarPdfUrl}
+                onChange={(v) => setCalendarPdfUrl(v as string)}
+                label="Calendar attachment"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="acCalExtUrl">External URL (optional)</Label>
+              <Input id="acCalExtUrl" name="externalUrl" type="url" placeholder="https://example.com" value={calendarExternalUrl} onChange={(e) => setCalendarExternalUrl(e.target.value)} />
             </div>
             <DialogFooter>
               <DialogClose asChild>
@@ -665,8 +934,60 @@ export function AcademicAdminSectionClient({
                 </Button>
               </DialogClose>
               <Button type="submit" disabled={isPending}>
-                Add entry
+                {editingCalendarEntry ? "Save changes" : "Add entry"}
               </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Syllabus upload / edit */}
+      <Dialog open={syllabusOpen} onOpenChange={setSyllabusOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingSyllabus ? "Edit syllabus" : "Upload syllabus"}</DialogTitle>
+          </DialogHeader>
+          <form
+            action={(formData) => {
+              formData.set("sphereId", sphereId)
+              formData.set("degree", section.degree ?? "")
+              formData.set("year", section.year ?? "")
+              formData.set("branch", section.branch ?? "")
+              if (syllabusPdfUrl) formData.set("pdfUrl", syllabusPdfUrl)
+              if (syllabusExternalUrl) formData.set("externalUrl", syllabusExternalUrl)
+              return run(async () => {
+                const r = editingSyllabus
+                  ? await updateSyllabusAction(formData)
+                  : await createSyllabusAction(formData)
+                if (!r.error) setSyllabusOpen(false)
+                return r
+              }, editingSyllabus ? "Syllabus updated" : "Syllabus added")
+            }}
+            className="flex flex-col gap-4"
+          >
+            {editingSyllabus && <input type="hidden" name="id" value={editingSyllabus.id} />}
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="acSyllTitle">Title</Label>
+              <Input id="acSyllTitle" name="title" required defaultValue={editingSyllabus?.title ?? ""} placeholder="First Year Curriculum 2024" />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>Syllabus PDF</Label>
+              <FileUpload
+                accept="pdf"
+                value={syllabusPdfUrl}
+                onChange={(v) => setSyllabusPdfUrl(v as string)}
+                label="Syllabus PDF"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="acSyllExtUrl">External URL (optional)</Label>
+              <Input id="acSyllExtUrl" name="externalUrl" type="url" placeholder="https://example.com" value={syllabusExternalUrl} onChange={(e) => setSyllabusExternalUrl(e.target.value)} />
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="ghost">Cancel</Button>
+              </DialogClose>
+              <Button type="submit" disabled={isPending}>{editingSyllabus ? "Save changes" : "Upload"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

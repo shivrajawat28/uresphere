@@ -96,6 +96,263 @@ function spherePaths(sphereId: string): string[] {
   return ["/admin", `/admin/spheres/${sphereId}`]
 }
 
+
+export async function updateDegreeAction(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  const sphereId = String(formData.get("sphereId") ?? "")
+  const oldDegree = String(formData.get("oldDegree") ?? "").trim()
+  const newDegree = String(formData.get("newDegree") ?? "").trim()
+  if (!sphereId || !oldDegree || !newDegree) return { error: "Missing required fields." }
+
+  const gate = await requireSphereAction(sphereId, "academic.update", { degree: oldDegree, year: "", branch: "" })
+  if (!gate.ok) return gate
+  const gateNew = await requireSphereAction(sphereId, "academic.update", { degree: newDegree, year: "", branch: "" })
+  if (!gateNew.ok) return gateNew
+
+  const { error } = await supabase.from("subjects").update({ degree: newDegree }).eq("sphere_id", sphereId).eq("degree", oldDegree)
+  if (error) return { error: "Couldn't update degree." }
+
+  await logAudit(supabase, gate.member.userId, sphereId, "degree_updated", "academic", undefined, { oldDegree, newDegree })
+  for (const p of spherePaths(sphereId)) revalidatePath(p)
+  revalidatePath("/dashboard/academic")
+  revalidatePath("/dashboard/academic/admin")
+  return { error: null }
+}
+
+export async function updateYearAction(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  const sphereId = String(formData.get("sphereId") ?? "")
+  const degree = String(formData.get("degree") ?? "").trim()
+  const oldYear = String(formData.get("oldYear") ?? "").trim()
+  const newYear = String(formData.get("newYear") ?? "").trim()
+  if (!sphereId || !degree || !oldYear || !newYear) return { error: "Missing required fields." }
+
+  const gate = await requireSphereAction(sphereId, "academic.update", { degree, year: oldYear, branch: "" })
+  if (!gate.ok) return gate
+  const gateNew = await requireSphereAction(sphereId, "academic.update", { degree, year: newYear, branch: "" })
+  if (!gateNew.ok) return gateNew
+
+  const { error } = await supabase.from("subjects").update({ year: newYear }).eq("sphere_id", sphereId).eq("degree", degree).eq("year", oldYear)
+  if (error) return { error: "Couldn't update year." }
+
+  await logAudit(supabase, gate.member.userId, sphereId, "year_updated", "academic", undefined, { degree, oldYear, newYear })
+  for (const p of spherePaths(sphereId)) revalidatePath(p)
+  revalidatePath("/dashboard/academic")
+  revalidatePath("/dashboard/academic/admin")
+  return { error: null }
+}
+
+export async function updateBranchAction(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  const sphereId = String(formData.get("sphereId") ?? "")
+  const degree = String(formData.get("degree") ?? "").trim()
+  const year = String(formData.get("year") ?? "").trim()
+  const oldBranch = String(formData.get("oldBranch") ?? "").trim()
+  const newBranch = String(formData.get("newBranch") ?? "").trim()
+  if (!sphereId || !degree || !year || !oldBranch || !newBranch) return { error: "Missing required fields." }
+
+  const gate = await requireSphereAction(sphereId, "academic.update", { degree, year, branch: oldBranch })
+  if (!gate.ok) return gate
+  const gateNew = await requireSphereAction(sphereId, "academic.update", { degree, year, branch: newBranch })
+  if (!gateNew.ok) return gateNew
+
+  const { error } = await supabase.from("subjects").update({ branch: newBranch }).eq("sphere_id", sphereId).eq("degree", degree).eq("year", year).eq("branch", oldBranch)
+  if (error) return { error: "Couldn't update branch." }
+
+  await logAudit(supabase, gate.member.userId, sphereId, "branch_updated", "academic", undefined, { degree, year, oldBranch, newBranch })
+  for (const p of spherePaths(sphereId)) revalidatePath(p)
+  revalidatePath("/dashboard/academic")
+  revalidatePath("/dashboard/academic/admin")
+  return { error: null }
+}
+
+export async function updateUnitAction(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  const id = String(formData.get("id") ?? "")
+  const name = String(formData.get("name") ?? "").trim()
+  if (!id || !name) return { error: "Unit ID and name are required." }
+
+  const { data: unit } = await supabase.from("academic_units").select("id, sphere_id, subject_id").eq("id", id).maybeSingle()
+  if (!unit) return { error: "Unit not found." }
+
+  const { data: subject } = await supabase.from("subjects").select("id, degree, year, branch").eq("id", unit.subject_id).maybeSingle()
+  const gate = await requireSphereAction(unit.sphere_id, "academic.update", { degree: subject?.degree, year: subject?.year, branch: subject?.branch })
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("academic_units").update({ name }).eq("id", id)
+  if (error) return { error: "Couldn't update unit." }
+
+  await logAudit(supabase, gate.member.userId, unit.sphere_id, "unit_updated", "unit", id)
+  for (const p of spherePaths(unit.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/academic")
+  revalidatePath("/dashboard/academic/admin")
+  return { error: null }
+}
+
+export async function createChapterAction(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  const unitId = String(formData.get("unitId") ?? "")
+  const name = String(formData.get("name") ?? "").trim()
+  if (!unitId || name.length < 1) return { error: "Unit ID and chapter name are required." }
+
+  const { data: unit } = await supabase.from("academic_units").select("id, sphere_id, subject_id").eq("id", unitId).maybeSingle()
+  if (!unit) return { error: "Unit not found." }
+  
+  const { data: subject } = await supabase.from("subjects").select("id, degree, year, branch").eq("id", unit.subject_id).maybeSingle()
+  const gate = await requireSphereAction(unit.sphere_id, "academic.create", { degree: subject?.degree, year: subject?.year, branch: subject?.branch })
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("academic_chapters").insert({ sphere_id: unit.sphere_id, unit_id: unitId, name })
+  if (error) return { error: "Couldn't create the chapter." }
+
+  await logAudit(supabase, gate.member.userId, unit.sphere_id, "chapter_created", "chapter")
+  for (const p of spherePaths(unit.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/academic")
+  revalidatePath("/dashboard/academic/admin")
+  return { error: null }
+}
+
+export async function updateChapterAction(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  const id = String(formData.get("id") ?? "")
+  const name = String(formData.get("name") ?? "").trim()
+  if (!id || !name) return { error: "Chapter ID and name are required." }
+
+  const { data: chapter } = await supabase.from("academic_chapters").select("id, sphere_id, unit_id").eq("id", id).maybeSingle()
+  if (!chapter) return { error: "Chapter not found." }
+
+  const { data: unit } = await supabase.from("academic_units").select("id, subject_id").eq("id", chapter.unit_id).maybeSingle()
+  const { data: subject } = unit ? await supabase.from("subjects").select("id, degree, year, branch").eq("id", unit.subject_id).maybeSingle() : { data: null }
+  
+  const gate = await requireSphereAction(chapter.sphere_id, "academic.update", { degree: subject?.degree, year: subject?.year, branch: subject?.branch })
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("academic_chapters").update({ name }).eq("id", id)
+  if (error) return { error: "Couldn't update chapter." }
+
+  await logAudit(supabase, gate.member.userId, chapter.sphere_id, "chapter_updated", "chapter", id)
+  for (const p of spherePaths(chapter.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/academic")
+  revalidatePath("/dashboard/academic/admin")
+  return { error: null }
+}
+
+export async function deleteChapterAction(chapterId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { data: chapter } = await supabase.from("academic_chapters").select("id, sphere_id, unit_id").eq("id", chapterId).maybeSingle()
+  if (!chapter) return { error: "Chapter not found." }
+
+  const { data: unit } = await supabase.from("academic_units").select("id, subject_id").eq("id", chapter.unit_id).maybeSingle()
+  const { data: subject } = unit ? await supabase.from("subjects").select("id, degree, year, branch").eq("id", unit.subject_id).maybeSingle() : { data: null }
+
+  const gate = await requireSphereAction(chapter.sphere_id, "academic.delete", { degree: subject?.degree, year: subject?.year, branch: subject?.branch })
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("academic_chapters").delete().eq("id", chapterId)
+  if (error) return { error: "Couldn't delete the chapter." }
+
+  await logAudit(supabase, gate.member.userId, chapter.sphere_id, "chapter_deleted", "chapter", chapterId)
+  for (const p of spherePaths(chapter.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/academic")
+  revalidatePath("/dashboard/academic/admin")
+  return { error: null }
+}
+
+export async function updateCalendarEntryAction(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  const id = String(formData.get("id") ?? "")
+  const title = String(formData.get("title") ?? "").trim()
+  const date = String(formData.get("date") ?? "")
+  const description = String(formData.get("description") ?? "").trim()
+  const pdfUrl = String(formData.get("pdfUrl") ?? "").trim() || null
+  const externalUrl = String(formData.get("externalUrl") ?? "").trim() || null
+
+  if (!id || title.length < 1 || !date) return { error: "Title and date are required." }
+
+  const { data: entry } = await supabase.from("academic_calendar").select("id, sphere_id").eq("id", id).maybeSingle()
+  if (!entry) return { error: "Calendar entry not found." }
+
+  const gate = await requireSphereAction(entry.sphere_id, "academic.update")
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("academic_calendar").update({ title, event_date: date, description, pdf_url: pdfUrl, external_url: externalUrl }).eq("id", id)
+  if (error) return { error: "Couldn't update the calendar entry." }
+
+  await logAudit(supabase, gate.member.userId, entry.sphere_id, "calendar_entry_updated", "calendar", id)
+  for (const p of spherePaths(entry.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/academic")
+  revalidatePath("/dashboard/academic/admin")
+  return { error: null }
+}
+
+export async function createSyllabusAction(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  const sphereId = String(formData.get("sphereId") ?? "")
+  const title = String(formData.get("title") ?? "").trim()
+  const degree = String(formData.get("degree") ?? "").trim()
+  const year = String(formData.get("year") ?? "").trim()
+  const branch = String(formData.get("branch") ?? "").trim()
+  const pdfUrl = String(formData.get("pdfUrl") ?? "").trim() || null
+  const externalUrl = String(formData.get("externalUrl") ?? "").trim() || null
+
+  if (!sphereId || title.length < 1 || !degree || !year) return { error: "Missing required fields." }
+
+  const gate = await requireSphereAction(sphereId, "academic.create", { degree, year, branch })
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("academic_syllabuses").insert({ sphere_id: sphereId, degree, year, branch, title, pdf_url: pdfUrl, external_url: externalUrl, created_by: gate.member.userId })
+  if (error) return { error: "Couldn't add the syllabus." }
+
+  await logAudit(supabase, gate.member.userId, sphereId, "syllabus_created", "academic")
+  for (const p of spherePaths(sphereId)) revalidatePath(p)
+  revalidatePath("/dashboard/academic")
+  revalidatePath("/dashboard/academic/admin")
+  return { error: null }
+}
+
+export async function updateSyllabusAction(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  const id = String(formData.get("id") ?? "")
+  const title = String(formData.get("title") ?? "").trim()
+  const pdfUrl = String(formData.get("pdfUrl") ?? "").trim() || null
+  const externalUrl = String(formData.get("externalUrl") ?? "").trim() || null
+
+  if (!id || title.length < 1) return { error: "ID and title are required." }
+
+  const { data: syllabus } = await supabase.from("academic_syllabuses").select("id, sphere_id, degree, year, branch").eq("id", id).maybeSingle()
+  if (!syllabus) return { error: "Syllabus not found." }
+
+  const gate = await requireSphereAction(syllabus.sphere_id, "academic.update", { degree: syllabus.degree, year: syllabus.year, branch: syllabus.branch })
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("academic_syllabuses").update({ title, pdf_url: pdfUrl, external_url: externalUrl }).eq("id", id)
+  if (error) return { error: "Couldn't update the syllabus." }
+
+  await logAudit(supabase, gate.member.userId, syllabus.sphere_id, "syllabus_updated", "academic", id)
+  for (const p of spherePaths(syllabus.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/academic")
+  revalidatePath("/dashboard/academic/admin")
+  return { error: null }
+}
+
+export async function deleteSyllabusAction(syllabusId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { data: syllabus } = await supabase.from("academic_syllabuses").select("id, sphere_id, degree, year, branch").eq("id", syllabusId).maybeSingle()
+  if (!syllabus) return { error: "Syllabus not found." }
+
+  const gate = await requireSphereAction(syllabus.sphere_id, "academic.delete", { degree: syllabus.degree, year: syllabus.year, branch: syllabus.branch })
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("academic_syllabuses").delete().eq("id", syllabusId)
+  if (error) return { error: "Couldn't delete the syllabus." }
+
+  await logAudit(supabase, gate.member.userId, syllabus.sphere_id, "syllabus_deleted", "academic", syllabusId)
+  for (const p of spherePaths(syllabus.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/academic")
+  revalidatePath("/dashboard/academic/admin")
+  return { error: null }
+}
+
 // ---------------------------------------------------------------------------
 // User management (administrators only)
 // ---------------------------------------------------------------------------
@@ -1052,6 +1309,7 @@ export async function uploadResourceAction(formData: FormData): Promise<ActionRe
 
   const title = String(formData.get("title") ?? "").trim()
   const subjectId = String(formData.get("subjectId") ?? "") || null
+  const chapterId = String(formData.get("chapterId") ?? "") || null
   const type = String(formData.get("type") ?? "notes")
   const url = String(formData.get("url") ?? "").trim()
 
@@ -1074,6 +1332,7 @@ export async function uploadResourceAction(formData: FormData): Promise<ActionRe
   const { error } = await supabase.from("academic_resources").insert({
     sphere_id: sphereId,
     subject_id: subjectId,
+    chapter_id: chapterId,
     title,
     type,
     url,
@@ -1093,6 +1352,7 @@ export async function updateResourceAction(formData: FormData): Promise<ActionRe
   const id = String(formData.get("id") ?? "")
   const title = String(formData.get("title") ?? "").trim()
   const subjectId = String(formData.get("subjectId") ?? "") || null
+  const chapterId = String(formData.get("chapterId") ?? "") || null
   const type = String(formData.get("type") ?? "notes")
   const url = String(formData.get("url") ?? "").trim()
   if (!id || title.length < 1 || !url) return { error: "Title and URL are required." }
@@ -1130,7 +1390,7 @@ export async function updateResourceAction(formData: FormData): Promise<ActionRe
 
   const { error } = await supabase
     .from("academic_resources")
-    .update({ title, subject_id: subjectId, type, url })
+    .update({ title, subject_id: subjectId, chapter_id: chapterId, type, url })
     .eq("id", id)
   if (error) return { error: "Couldn't update the resource." }
 
