@@ -57,6 +57,9 @@ export function ShopGrid({ products }: { products: ShopProduct[] }) {
               </span>
             </div>
             {p.description && <p className="line-clamp-2 text-sm text-muted-foreground">{p.description}</p>}
+            <p className="text-xs font-medium text-muted-foreground">
+              Sold by: <span className="text-foreground">{p.shopName || "ÙreSphere Shop"}</span>
+            </p>
             {p.delivery_info && <p className="text-xs text-muted-foreground">📍 {p.delivery_info}</p>}
           </CardContent>
           <CardFooter className="flex items-center justify-between border-t border-border p-4 pt-3">

@@ -32,6 +32,7 @@ import {
   CalendarCheck2,
   MessagesSquare,
   MessageSquareText,
+  Store,
 } from "lucide-react"
 
 type NavLink = { href: string; label: string; icon: typeof LayoutGrid; badge?: number }
@@ -43,6 +44,7 @@ export type SectionAdminFlags = {
   social?: boolean
   clubs?: boolean
   globalListings?: boolean
+  shop?: boolean
 }
 
 export function DashboardNav({
@@ -106,6 +108,9 @@ export function DashboardNav({
             ? [{ href: "/dashboard/promotions/admin", label: "Promotions Admin", icon: ShieldAlert }]
             : []),
           { href: "/dashboard/marketplace", label: "Marketplace", icon: ShoppingBag },
+          ...(sectionAdmins.shop
+            ? [{ href: "/dashboard/marketplace/shop-admin", label: "Shop Admin", icon: Store }]
+            : []),
         ],
       },
       {
@@ -165,6 +170,9 @@ export function DashboardNav({
         ? [{ href: "/dashboard/global-listings/admin", label: "Global Listings Admin", icon: Globe }]
         : []),
       { href: "/dashboard/premium", label: "Premium", icon: Gem },
+      ...(sectionAdmins.shop
+        ? [{ href: "/dashboard/marketplace/shop-admin", label: "Shop Admin", icon: Store }]
+        : []),
       { href: "/dashboard/roadmap", label: "Roadmap", icon: Milestone },
       { href: "/dashboard/feedback", label: "Feedback", icon: MessageSquareText },
       { href: "/dashboard/settings", label: "Profile & settings", icon: Settings },

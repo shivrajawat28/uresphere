@@ -12,6 +12,7 @@ export const SECTION_ADMIN_ROLES = [
   "social_moderator",
   "club_manager",
   "club_admin",
+  "shop_admin",
 ] as const
 
 export type SectionAdminRole = (typeof SECTION_ADMIN_ROLES)[number]
