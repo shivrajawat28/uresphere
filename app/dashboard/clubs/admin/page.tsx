@@ -22,22 +22,40 @@ export default async function ClubsAdminPage(
   let activeWorkspace = workspace ?? clubAdminWorkspace
 
   // Super-admin / admin users don't need a role_assignments row — they have
-  // implicit full access. Build a synthetic workspace so the rest of the page
+  // implicit full access. Sphere admins also have implicit full access to clubs
+  // in their assigned spheres. Build a synthetic workspace so the rest of the page
   // works unchanged.
   const targetSphereId = searchParams.sphereId ?? member.sphereId
-  if (!activeWorkspace && (member.role === "super_admin" || member.role === "admin") && targetSphereId) {
-    let targetSphereName = member.sphereName
-    if (targetSphereId !== member.sphereId) {
+  if (!activeWorkspace && targetSphereId) {
+    const isGlobalAdmin = member.role === "super_admin" || member.role === "admin"
+    let isSphereAdmin = false
+
+    if (!isGlobalAdmin) {
       const supabase = await createClient()
-      const { data: s } = await supabase.from("spheres").select("name").eq("id", targetSphereId).maybeSingle()
-      if (s) targetSphereName = s.name
+      const { data: assignment } = await supabase
+        .from("role_assignments")
+        .select("id")
+        .eq("user_id", member.userId)
+        .eq("sphere_id", targetSphereId)
+        .eq("role", "sphere_admin")
+        .maybeSingle()
+      if (assignment) isSphereAdmin = true
     }
 
-    activeWorkspace = {
-      role: "club_manager" as const,
-      sphereId: targetSphereId,
-      sphereName: targetSphereName,
-      permissions: ["clubs.read", "clubs.create", "clubs.update", "clubs.delete"],
+    if (isGlobalAdmin || isSphereAdmin) {
+      let targetSphereName = member.sphereName
+      if (targetSphereId !== member.sphereId) {
+        const supabase = await createClient()
+        const { data: s } = await supabase.from("spheres").select("name").eq("id", targetSphereId).maybeSingle()
+        if (s) targetSphereName = s.name
+      }
+
+      activeWorkspace = {
+        role: "club_manager" as const,
+        sphereId: targetSphereId,
+        sphereName: targetSphereName,
+        permissions: ["clubs.read", "clubs.create", "clubs.update", "clubs.delete"],
+      }
     }
   }
 

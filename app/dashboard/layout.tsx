@@ -43,10 +43,6 @@ export default async function DashboardLayout({ children }: { children: ReactNod
       <DashboardNav member={member} initialUnread={unreadResult.count ?? 0} sectionAdmins={sectionAdmins} />
       {/* pb-24 reserves room for the fixed mobile bottom nav; desktop has none. */}
       <main className="min-w-0 flex-1 overflow-x-hidden pb-24 md:pb-0">
-        {/* Notification bell — positioned top-right on desktop, fixed on mobile */}
-        <div className="sticky top-0 z-30 flex justify-end px-4 pt-3 md:hidden">
-          <NotificationCenter userId={member.userId} initialUnread={unreadResult.count ?? 0} />
-        </div>
         <div className="hidden md:block fixed right-6 top-4 z-30">
           <NotificationCenter userId={member.userId} initialUnread={unreadResult.count ?? 0} />
         </div>

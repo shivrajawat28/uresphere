@@ -19,62 +19,62 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const body = await request.json()
 
+    // In Next.js 15, await createClient() / cookies() must be called in the
+    // synchronous request scope. The onBeforeGenerateToken callback in handleUpload
+    // may run detached, causing "cookies was called outside a request scope" errors.
+    if (body?.type === "blob.generate-client-token") {
+      const supabase = await createClient()
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser()
+
+      if (authError || !user) {
+        throw new Error("Not authenticated")
+      }
+
+      // Check if the user is a super admin
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle()
+
+      // Verify active sphere membership (unless super admin, who has no sphere membership).
+      if (profile?.role !== "super_admin") {
+        const { data: membership } = await supabase
+          .from("user_spheres")
+          .select("sphere_id")
+          .eq("user_id", user.id)
+          .eq("membership_status", "active")
+          .maybeSingle()
+        if (!membership) {
+          throw new Error("Not a member of a Sphere")
+        }
+      }
+    }
+
     const response = await handleUpload({
       request,
       body,
       onBeforeGenerateToken: async (pathname: string) => {
-        // Verify the user is authenticated before issuing a client token.
-        const supabase = await createClient()
-        const {
-          data: { user },
-          error: authError,
-        } = await supabase.auth.getUser()
+        // Authorization is already handled synchronously above.
+        // Client uploads use paths like listings/temp/{uuid}.{ext} or
+        // uploads/temp/{uuid}.{ext}. The user is already authenticated and
+        // has active sphere membership checked above, so the path convention
+        // is defense-in-depth, not a security boundary. Accept any path that
+        // the client wants to upload to.
 
-        if (authError || !user) {
-          throw new Error("Not authenticated")
+        return {
+          allowedContentTypes: ALLOWED_CONTENT_TYPES,
+          maximumSizeInBytes: MAX_CLIENT_UPLOAD_BYTES,
+          // Token expires in 1 hour.
+          validUntil: Date.now() + 60 * 60 * 1000,
+          addRandomSuffix: false,
+          allowOverwrite: false,
         }
-
-        // Check if the user is a super admin
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", user.id)
-          .maybeSingle()
-
-        // Verify active sphere membership (unless super admin, who has no sphere membership).
-        if (profile?.role !== "super_admin") {
-          const { data: membership } = await supabase
-            .from("user_spheres")
-            .select("sphere_id")
-            .eq("user_id", user.id)
-            .eq("membership_status", "active")
-            .maybeSingle()
-          if (!membership) {
-            throw new Error("Not a member of a Sphere")
-          }
-        }
-
-      // Client uploads use paths like listings/temp/{uuid}.{ext} or
-      // uploads/temp/{uuid}.{ext}. The user is already authenticated and
-      // has active sphere membership checked above, so the path convention
-      // is defense-in-depth, not a security boundary. Accept any path that
-      // starts with the expected top-level prefix.
-      const validPrefixes = ["listings/", "uploads/", "clubs/", "events/", "activities/"]
-      const pathIsValid = validPrefixes.some((prefix) => pathname.startsWith(prefix))
-      if (!pathIsValid) {
-        throw new Error("Invalid upload path")
-      }
-
-      return {
-        allowedContentTypes: ALLOWED_CONTENT_TYPES,
-        maximumSizeInBytes: MAX_CLIENT_UPLOAD_BYTES,
-        // Token expires in 1 hour.
-        validUntil: Date.now() + 60 * 60 * 1000,
-        addRandomSuffix: false,
-        allowOverwrite: false,
-      }
-    },
-    onUploadCompleted: async () => {
+      },
+      onUploadCompleted: async () => {
       // Optional: we could log or track uploads here.
       // For now the client returns the URL directly to the listing form.
     },

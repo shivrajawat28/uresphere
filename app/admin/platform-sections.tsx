@@ -617,8 +617,8 @@ export function TeamSection({ team }: { team: PlatformData["team"] }) {
             <FileUpload
               accept="image"
               maxFiles={1}
-              value={photoUrls}
-              onChange={(v) => setPhotoUrls(v as string[])}
+              value={photoUrls[0] || ""}
+              onChange={(v) => setPhotoUrls(v ? [v as string] : [])}
             />
             <input type="hidden" name="photoUrl" value={photoUrls[0] || ""} />
           </div>
