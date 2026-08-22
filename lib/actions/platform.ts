@@ -803,8 +803,10 @@ export async function deleteShopProductAction(productId: string): Promise<Action
     return { error: "Product not found in your Sphere." }
   }
 
-  const { error } = await supabase.from("shop_products").delete().eq("id", productId)
-  if (error) return { error: "Couldn't delete the product." }
+  const { data: deleted, error } = await supabase.from("shop_products").delete().eq("id", productId).select("id")
+  if (error || !deleted || deleted.length === 0) {
+    return { error: "Couldn't delete the product. It may not exist or you don't have permission." }
+  }
 
   revalidatePath("/dashboard/marketplace")
   revalidatePath("/admin")
