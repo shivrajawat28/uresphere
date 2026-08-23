@@ -2,7 +2,7 @@ import Link from "next/link"
 import { requireMember } from "@/lib/data/session"
 import { createClient } from "@/lib/supabase/server"
 import { MarkAllReadButton } from "./mark-all-read-button"
-import { Card, CardContent } from "@/components/ui/card"
+import { NotificationItem } from "./notification-item"
 import { Bell, BellRing, Sparkles } from "lucide-react"
 import type { ReactNode } from "react"
 
@@ -45,36 +45,8 @@ export default async function NotificationsPage() {
       ) : (
         <div className="space-y-2">
           {notifications.map((n) => {
-            const inner = (
-              <CardContent className="flex items-start gap-3 p-4">
-                <div className="mt-0.5 shrink-0">{TYPE_ICONS[n.type] ?? <Bell className="size-4 text-muted-foreground" />}</div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground">{n.title}</p>
-                  {n.body && <p className="text-sm text-muted-foreground">{n.body}</p>}
-                  <p className="mt-1 text-[11px] text-muted-foreground/70">
-                    {new Date(n.created_at).toLocaleString("en-IN", {
-                      day: "numeric",
-                      month: "short",
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
-                  </p>
-                </div>
-                {!n.read && <span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" aria-label="Unread" />}
-              </CardContent>
-            )
-            const card = (
-              <Card key={n.id} className={`border-border/70 bg-card transition-colors ${n.read ? "opacity-60" : ""}`}>
-                {inner}
-              </Card>
-            )
-            return n.link ? (
-              <Link key={n.id} href={n.link} className="block rounded-xl transition-transform duration-150 hover:-translate-y-0.5">
-                {card}
-              </Link>
-            ) : (
-              card
-            )
+            const icon = TYPE_ICONS[n.type] ?? <Bell className="size-4 text-muted-foreground" />
+            return <NotificationItem key={n.id} notification={n} icon={icon} />
           })}
         </div>
       )}

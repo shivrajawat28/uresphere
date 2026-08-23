@@ -16,10 +16,10 @@ export default async function GroupsPage({
   const supabase = await createClient()
   const { group } = await searchParams
 
-  const [groupsResult, invitesResult, messagesResult, groupResult, groupMembersResult] = await Promise.all([
+  const [groupsResult, invitesResult, messagesResult, groupResult, groupMembersResult, outgoingRequestsResult] = await Promise.all([
     supabase
       .from("groups")
-      .select("id, name, description, created_by, created_at, group_members(user_id), group_messages(id)")
+      .select("id, name, description, is_private, created_by, created_at, group_members(user_id), group_messages(id)")
       .eq("sphere_id", member.sphereId)
       .order("created_at", { ascending: false }),
     supabase
@@ -44,9 +44,39 @@ export default async function GroupsPage({
       ? supabase.from("groups").select("id, name, created_by").eq("id", group).eq("sphere_id", member.sphereId).maybeSingle()
       : { data: null },
     group
-      ? supabase.from("group_members").select("user_id").eq("group_id", group)
+      ? supabase.from("group_members").select("user_id, role").eq("group_id", group)
       : { data: null },
+    supabase
+      .from("group_requests")
+      .select("id, group_id, status")
+      .eq("user_id", member.userId)
+      .eq("status", "pending"),
   ])
+
+  let incomingRequests: { id: string; user_id: string; handle: string; status: string }[] = []
+  if (group && groupMembersResult.data?.some((m) => m.user_id === member.userId && (m.role === "admin" || m.role === "super_admin"))) {
+    const { data: requestsData } = await supabase
+      .from("group_requests")
+      .select("id, user_id, status")
+      .eq("group_id", group)
+      .eq("status", "pending")
+    
+    if (requestsData && requestsData.length > 0) {
+      const userIds = requestsData.map((r) => r.user_id)
+      const { data: handles } = await supabase
+        .from("user_spheres")
+        .select("user_id, anonymous_handle")
+        .in("user_id", userIds)
+      
+      const handleMap = new Map((handles ?? []).map((h) => [h.user_id, h.anonymous_handle]))
+      incomingRequests = requestsData.map((r) => ({
+        id: r.id,
+        user_id: r.user_id,
+        handle: handleMap.get(r.user_id) ?? "Unknown",
+        status: r.status,
+      }))
+    }
+  }
 
   // Resolve anonymous handles for message authors.
   let handleMap = new Map<string, string>()
@@ -63,22 +93,15 @@ export default async function GroupsPage({
     id: g.id,
     name: g.name,
     description: g.description,
+    is_private: g.is_private,
     created_by: g.created_by,
     created_at: g.created_at,
     memberCount: Array.isArray(g.group_members) ? g.group_members.length : 0,
     isMember: Array.isArray(g.group_members) ? g.group_members.some((m: { user_id: string }) => m.user_id === member.userId) : false,
+    hasPendingRequest: (outgoingRequestsResult.data ?? []).some((r) => r.group_id === g.id),
   }))
 
   const activeGroup = groupResult.data
-    ? {
-        id: groupResult.data.id,
-        name: groupResult.data.name,
-        created_by: groupResult.data.created_by,
-        isMember: Array.isArray(groupMembersResult.data)
-          ? groupMembersResult.data.some((m) => m.user_id === member.userId)
-          : false,
-      }
-    : null
 
   const { messages: initialMessages, hasMore: initialHasMore, oldestCreatedAt: initialOldestCreatedAt } =
     selectInitialWindow(
@@ -117,7 +140,18 @@ export default async function GroupsPage({
               (Array.isArray(i.groups) ? (i.groups[0] as { name?: string } | null)?.name : (i.groups as { name?: string } | null)?.name) ??
               "Unknown group",
           }))}
-          activeGroup={activeGroup}
+          activeGroup={activeGroup ? {
+            id: groupResult.data?.id ?? "",
+            name: groupResult.data?.name ?? "",
+            created_by: groupResult.data?.created_by ?? "",
+            isMember: Array.isArray(groupMembersResult.data)
+              ? groupMembersResult.data.some((m) => m.user_id === member.userId)
+              : false,
+            isAdmin: Array.isArray(groupMembersResult.data)
+              ? groupMembersResult.data.some((m) => m.user_id === member.userId && (m.role === "admin" || m.role === "super_admin"))
+              : false,
+          } : null}
+          incomingRequests={incomingRequests}
           initialMessages={initialMessages}
           initialHasMore={initialHasMore}
           initialOldestCreatedAt={initialOldestCreatedAt}

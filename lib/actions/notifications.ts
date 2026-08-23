@@ -12,7 +12,7 @@ export async function markAllNotificationsReadAction(): Promise<ActionResult> {
   } = await supabase.auth.getUser()
   if (!user) return { error: "Not signed in." }
 
-  const { error } = await supabase.from("notifications").update({ read: true }).eq("user_id", user.id).eq("read", false)
+  const { error } = await supabase.from("notifications").delete().eq("user_id", user.id)
   if (error) return { error: "Couldn't update notifications." }
 
   revalidatePath("/dashboard/notifications")
@@ -26,7 +26,7 @@ export async function markNotificationReadAction(id: string): Promise<ActionResu
   } = await supabase.auth.getUser()
   if (!user) return { error: "Not signed in." }
 
-  const { error } = await supabase.from("notifications").update({ read: true }).eq("id", id).eq("user_id", user.id)
+  const { error } = await supabase.from("notifications").delete().eq("id", id).eq("user_id", user.id)
   if (error) return { error: "Couldn't update notification." }
 
   revalidatePath("/dashboard/notifications")

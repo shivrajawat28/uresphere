@@ -149,6 +149,15 @@ export async function reviewListingAction(
       p_body: `“${listing.title}” was approved and is now visible in the Marketplace.`,
       p_link: "/dashboard/marketplace",
     })
+
+    await supabase.rpc("notify_sphere_users", {
+      p_sphere_id: listing.sphere_id,
+      p_type: "general",
+      p_title: "New Marketplace Listing",
+      p_body: `A new item “${listing.title}” is available in the Marketplace.`,
+      p_link: `/dashboard/marketplace`,
+      p_exclude_user_id: listing.seller_id,
+    })
   } else {
     const cleanReason = reason.trim().slice(0, 300)
     const { error } = await supabase

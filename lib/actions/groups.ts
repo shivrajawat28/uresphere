@@ -219,13 +219,14 @@ export async function createGroupAction(formData: FormData): Promise<ActionResul
 
   const name = String(formData.get("name") ?? "").trim()
   const description = String(formData.get("description") ?? "").trim()
+  const isPrivate = String(formData.get("isPrivate") ?? "false") === "true"
 
   if (name.length < 1 || name.length > 80) return { error: "Group name must be 1–80 characters." }
   if (description.length > 500) return { error: "Description is too long (max 500)." }
 
   const { data: group, error } = await supabase
     .from("groups")
-    .insert({ sphere_id: member.sphereId, name, description, created_by: member.userId })
+    .insert({ sphere_id: member.sphereId, name, description, is_private: isPrivate, created_by: member.userId })
     .select("id")
     .single()
 
@@ -241,6 +242,64 @@ export async function createGroupAction(formData: FormData): Promise<ActionResul
   })
   if (memberError) {
     return { error: "Couldn't create the group. Try again." }
+  }
+
+  revalidatePath("/dashboard/groups")
+  return { error: null }
+}
+
+export async function requestToJoinGroupAction(groupId: string): Promise<ActionResult> {
+  const member = await requireMember()
+  const supabase = await createClient()
+
+  const { data: group } = await supabase
+    .from("groups")
+    .select("is_private")
+    .eq("id", groupId)
+    .maybeSingle()
+
+  if (!group) return { error: "Group not found." }
+  if (group.is_private) return { error: "You cannot request to join a private group." }
+
+  const { error } = await supabase.from("group_requests").insert({
+    group_id: groupId,
+    user_id: member.userId,
+  })
+
+  if (error) {
+    if (String(error.message).includes("duplicate")) return { error: "Request already pending." }
+    return { error: "Couldn't send the request." }
+  }
+
+  revalidatePath("/dashboard/groups")
+  return { error: null }
+}
+
+export async function respondToGroupRequestAction(requestId: string, accept: boolean): Promise<ActionResult> {
+  const member = await requireMember()
+  const supabase = await createClient()
+
+  const { data: request } = await supabase
+    .from("group_requests")
+    .select("id, group_id, user_id, status")
+    .eq("id", requestId)
+    .maybeSingle()
+  if (!request) return { error: "Request not found." }
+  if (request.status !== "pending") return { error: "This request was already handled." }
+
+  const { error: updateError } = await supabase
+    .from("group_requests")
+    .update({ status: accept ? "accepted" : "rejected" })
+    .eq("id", requestId)
+  if (updateError) return { error: "Couldn't update the request." }
+
+  if (accept) {
+    const { error: joinError } = await supabase.from("group_members").insert({
+      group_id: request.group_id,
+      user_id: request.user_id,
+      role: "member",
+    })
+    if (joinError) return { error: "Couldn't add user to the group." }
   }
 
   revalidatePath("/dashboard/groups")

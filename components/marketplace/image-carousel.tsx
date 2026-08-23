@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react"
 import Image from "next/image"
 import { ChevronLeft, ChevronRight, ImageOff } from "lucide-react"
+import { ImageViewer } from "@/components/ui/image-viewer"
 
 /**
  * Touch-swipeable image carousel for marketplace listings.
@@ -19,8 +20,10 @@ export function ImageCarousel({
   className?: string
 }) {
   const [current, setCurrent] = useState(0)
+  const [viewerOpen, setViewerOpen] = useState(false)
   const touchStartX = useRef(0)
   const touchDeltaX = useRef(0)
+  const isDragging = useRef(false)
 
   const count = images.length
   const hasMultiple = count > 1
@@ -31,10 +34,14 @@ export function ImageCarousel({
   function handleTouchStart(e: React.TouchEvent) {
     touchStartX.current = e.touches[0].clientX
     touchDeltaX.current = 0
+    isDragging.current = false
   }
 
   function handleTouchMove(e: React.TouchEvent) {
     touchDeltaX.current = e.touches[0].clientX - touchStartX.current
+    if (Math.abs(touchDeltaX.current) > 10) {
+      isDragging.current = true
+    }
   }
 
   function handleTouchEnd() {
@@ -65,7 +72,17 @@ export function ImageCarousel({
         style={{ transform: `translateX(-${current * 100}%)` }}
       >
         {images.map((url, i) => (
-          <div key={url} className="relative h-full w-full shrink-0">
+          <div 
+            key={url} 
+            className="relative h-full w-full shrink-0 cursor-pointer"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              if (!isDragging.current) {
+                setViewerOpen(true)
+              }
+            }}
+          >
             <Image
               src={url}
               alt={`${alt} — photo ${i + 1}`}
@@ -105,6 +122,14 @@ export function ImageCarousel({
         <div className="absolute bottom-2 left-1/2 z-10 -translate-x-1/2 rounded-full bg-background/80 px-2 py-0.5 text-[10px] font-medium text-foreground shadow-sm backdrop-blur-sm">
           {current + 1} / {count}
         </div>
+      )}
+
+      {viewerOpen && (
+        <ImageViewer
+          images={images}
+          initialIndex={current}
+          onClose={() => setViewerOpen(false)}
+        />
       )}
     </div>
   )

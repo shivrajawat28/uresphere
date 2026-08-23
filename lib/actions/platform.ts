@@ -756,25 +756,14 @@ export async function upsertShopProductAction(formData: FormData): Promise<Actio
     }
     
     if (active) {
-      const { data: members } = await supabase
-        .from("user_spheres")
-        .select("user_id")
-        .eq("sphere_id", productSphereId)
-        .eq("membership_status", "active")
-        .neq("user_id", member.userId)
-        
-      if (members && members.length > 0) {
-        const notifications = members.map((m) => ({
-          user_id: m.user_id,
-          type: "marketplace",
-          title: "New Shop Product",
-          body: `${shopName} added a new product: ${name}.`,
-          link: "/dashboard/marketplace",
-        }))
-        
-        // Supabase can handle bulk inserts of a reasonable size natively
-        await supabase.from("notifications").insert(notifications)
-      }
+      await supabase.rpc("notify_sphere_users", {
+        p_sphere_id: productSphereId,
+        p_type: "marketplace",
+        p_title: "New Shop Product",
+        p_body: `${shopName} added a new product: ${name}.`,
+        p_link: "/dashboard/marketplace",
+        p_exclude_user_id: member.userId,
+      })
     }
   }
 

@@ -49,13 +49,16 @@ type GroupSummary = {
   id: string
   name: string
   description: string
+  is_private: boolean
   created_by: string
   created_at: string
   memberCount: number
   isMember: boolean
+  hasPendingRequest: boolean
 }
 
 type Invite = { id: string; groupId: string; groupName: string }
+type JoinRequest = { id: string; user_id: string; handle: string; status: string }
 
 type Message = {
   id: string
@@ -69,6 +72,7 @@ type Message = {
 export function GroupsClient({
   groups,
   pendingInvites,
+  incomingRequests,
   activeGroup,
   initialMessages,
   initialHasMore,
@@ -79,7 +83,8 @@ export function GroupsClient({
 }: {
   groups: GroupSummary[]
   pendingInvites: Invite[]
-  activeGroup: { id: string; name: string; created_by: string; isMember: boolean } | null
+  incomingRequests: JoinRequest[]
+  activeGroup: { id: string; name: string; created_by: string; isMember: boolean; isAdmin: boolean } | null
   initialMessages: Message[]
   initialHasMore: boolean
   initialOldestCreatedAt: string | null
@@ -89,6 +94,7 @@ export function GroupsClient({
 }) {
   const [createOpen, setCreateOpen] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [isPrivate, setIsPrivate] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   function handleCreate(formData: FormData) {
@@ -134,6 +140,44 @@ export function GroupsClient({
             New group
           </Button>
         </div>
+
+        {incomingRequests.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Join Requests</p>
+            {incomingRequests.map((req) => (
+              <Card key={req.id} className="border-border/70 bg-card">
+                <CardContent className="flex items-center justify-between gap-2 p-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{req.handle}</p>
+                    <p className="text-xs text-muted-foreground">wants to join</p>
+                  </div>
+                  <div className="flex shrink-0 gap-1.5">
+                    <form action={() => startTransition(async () => {
+                      const { respondToGroupRequestAction } = await import("@/lib/actions/groups")
+                      const result = await respondToGroupRequestAction(req.id, true)
+                      if (result.error) toast.error(result.error)
+                      else toast.success("Request approved")
+                    })}>
+                      <Button size="icon-sm" variant="outline" aria-label="Approve">
+                        <Check className="size-3.5 text-primary" />
+                      </Button>
+                    </form>
+                    <form action={() => startTransition(async () => {
+                      const { respondToGroupRequestAction } = await import("@/lib/actions/groups")
+                      const result = await respondToGroupRequestAction(req.id, false)
+                      if (result.error) toast.error(result.error)
+                      else toast.success("Request rejected")
+                    })}>
+                      <Button size="icon-sm" variant="ghost" aria-label="Decline">
+                        <X className="size-3.5" />
+                      </Button>
+                    </form>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
 
         {pendingInvites.length > 0 && (
           <div className="space-y-2">
@@ -182,11 +226,15 @@ export function GroupsClient({
                   {group.memberCount} member{group.memberCount === 1 ? "" : "s"}
                 </p>
               </div>
-              {group.isMember && (
+              {group.isMember ? (
                 <Badge variant="outline" className="shrink-0 border-border/60 text-[10px] font-normal">
                   Joined
                 </Badge>
-              )}
+              ) : group.is_private ? (
+                <Badge variant="secondary" className="shrink-0 border-border/60 text-[10px] font-normal bg-secondary">
+                  Private
+                </Badge>
+              ) : null}
             </Link>
           ))}
         </div>
@@ -196,7 +244,7 @@ export function GroupsClient({
       {activeGroup ? (
         <GroupChat
           key={activeGroup.id}
-          group={activeGroup}
+          group={groups.find(g => g.id === activeGroup.id) ?? { ...activeGroup, description: "", is_private: false, created_at: "", memberCount: 0, hasPendingRequest: false }}
           initialMessages={initialMessages}
           initialHasMore={initialHasMore}
           initialOldestCreatedAt={initialOldestCreatedAt}
@@ -231,6 +279,37 @@ export function GroupsClient({
               <Label htmlFor="description">Description (optional)</Label>
               <Textarea id="description" name="description" maxLength={500} rows={3} placeholder="What's this group about?" />
             </div>
+            
+            <input type="hidden" name="isPrivate" value={isPrivate ? "true" : "false"} />
+            <div className="flex flex-col gap-3 rounded-lg border border-border p-4 bg-muted/30">
+              <div className="flex items-center gap-3">
+                <input
+                  type="radio"
+                  id="privacy-public"
+                  checked={!isPrivate}
+                  onChange={() => setIsPrivate(false)}
+                  className="h-4 w-4 text-primary"
+                />
+                <div>
+                  <Label htmlFor="privacy-public" className="font-semibold cursor-pointer">Public</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">Anyone in the Sphere can find and request to join.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="radio"
+                  id="privacy-private"
+                  checked={isPrivate}
+                  onChange={() => setIsPrivate(true)}
+                  className="h-4 w-4 text-primary"
+                />
+                <div>
+                  <Label htmlFor="privacy-private" className="font-semibold cursor-pointer">Private</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">Hidden from discovery. Members must be invited.</p>
+                </div>
+              </div>
+            </div>
+
             <DialogFooter>
               <DialogClose asChild>
                 <Button type="button" variant="ghost">
@@ -284,7 +363,7 @@ function GroupChat({
   isAdmin,
   onOpenInvite,
 }: {
-  group: { id: string; name: string; created_by: string; isMember: boolean }
+  group: GroupSummary | { id: string; name: string; created_by: string; isMember: boolean; description: string; is_private: boolean; created_at: string; memberCount: number; hasPendingRequest: boolean }
   initialMessages: Message[]
   initialHasMore: boolean
   initialOldestCreatedAt: string | null
@@ -500,7 +579,10 @@ function GroupChat({
     <div className="flex min-h-[60svh] flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card lg:h-[70svh]">
       <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div className="min-w-0">
-          <h2 className="truncate font-serif text-lg font-medium text-foreground">{group.name}</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="truncate font-serif text-lg font-medium text-foreground">{group.name}</h2>
+            {group.is_private && <Badge variant="secondary" className="bg-secondary text-[10px]">Private</Badge>}
+          </div>
           <p className="text-xs text-muted-foreground">Private group chat in your Sphere</p>
         </div>
         {group.isMember && (
@@ -650,11 +732,38 @@ function GroupChat({
           </form>
         </>
       ) : (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
-          <p className="text-sm text-muted-foreground">You haven&apos;t joined this group yet.</p>
-          <p className="max-w-sm text-xs text-muted-foreground">
-            Ask a member to send you an invite by your anonymous handle ({currentHandle}).
-          </p>
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
+          <MessageCircle className="size-8 text-muted-foreground/30" />
+          <div>
+            <p className="text-sm font-medium text-foreground">You haven&apos;t joined this group yet.</p>
+            <p className="max-w-sm text-xs text-muted-foreground mt-1">
+              {group.is_private
+                ? `Ask a member to invite you by your handle (${currentHandle}).`
+                : "Join the group to see messages and participate in the conversation."}
+            </p>
+          </div>
+          
+          {!group.is_private && (
+            <div className="mt-2">
+              {group.hasPendingRequest ? (
+                <Button disabled variant="outline" className="w-full sm:w-auto">
+                  <Loader2 className="mr-2 size-4 animate-spin text-muted-foreground" />
+                  Request pending
+                </Button>
+              ) : (
+                <form action={() => startTransition(async () => {
+                  const { requestToJoinGroupAction } = await import("@/lib/actions/groups")
+                  const result = await requestToJoinGroupAction(group.id)
+                  if (result.error) toast.error(result.error)
+                  else toast.success("Join request sent")
+                })}>
+                  <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
+                    Request to join
+                  </Button>
+                </form>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

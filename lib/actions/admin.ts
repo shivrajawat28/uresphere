@@ -762,6 +762,15 @@ export async function createEventAction(formData: FormData): Promise<ActionResul
   })
   if (error) return { error: "Couldn't create the event." }
 
+  await supabase.rpc("notify_sphere_users", {
+    p_sphere_id: sphereId,
+    p_type: "general",
+    p_title: "New Event",
+    p_body: `${title} has been added to your Sphere.`,
+    p_link: "/dashboard/events",
+    p_exclude_user_id: gate.member.userId,
+  })
+
   await logAudit(supabase, gate.member.userId, sphereId, "event_created", "event")
   for (const p of spherePaths(sphereId)) revalidatePath(p)
   revalidatePath("/dashboard/events")
@@ -819,6 +828,15 @@ export async function createClubAction(formData: FormData): Promise<ActionResult
     created_by: gate.member.userId,
   })
   if (error) return { error: "Couldn't create the club." }
+
+  await supabase.rpc("notify_sphere_users", {
+    p_sphere_id: sphereId,
+    p_type: "general",
+    p_title: "New Club",
+    p_body: `${name} has been added to your Sphere.`,
+    p_link: "/dashboard/clubs",
+    p_exclude_user_id: gate.member.userId,
+  })
 
   await logAudit(supabase, gate.member.userId, sphereId, "club_created", "club")
   for (const p of spherePaths(sphereId)) revalidatePath(p)

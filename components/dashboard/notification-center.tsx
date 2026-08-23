@@ -95,6 +95,18 @@ export function NotificationCenter({
           if (prev !== next) setUnread((c) => Math.max(0, c + (next ? -1 : 1)))
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
+        (payload) => {
+          const old = payload.old as { id: string }
+          setNotifications((prev) => {
+            const exists = prev.find((n) => n.id === old.id)
+            if (exists && !exists.read) setUnread((c) => Math.max(0, c - 1))
+            return prev.filter((n) => n.id !== old.id)
+          })
+        },
+      )
       .subscribe()
     return () => {
       supabase.removeChannel(channel)
@@ -142,10 +154,7 @@ export function NotificationCenter({
     if (result.error) toast.error(result.error)
     else {
       // Update local notification list AND decrement unread count immediately.
-      // The realtime UPDATE event will also fire, but the local update provides
-      // instant feedback even if the realtime channel is slow or temporarily
-      // disconnected.
-      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)))
+      setNotifications((prev) => prev.filter((n) => n.id !== id))
       setUnread((c) => Math.max(0, c - 1))
     }
   }
@@ -162,10 +171,10 @@ export function NotificationCenter({
       setNotifications((prev) => {
         const unreadCount = prev.filter((n) => !n.read).length
         setUnread(unreadCount)
-        return prev.map((n) => ({ ...n, read: true }))
+        return prev
       })
     } else {
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+      setNotifications([])
     }
   }
 
