@@ -254,7 +254,7 @@ export async function requestToJoinGroupAction(groupId: string): Promise<ActionR
 
   const { data: group } = await supabase
     .from("groups")
-    .select("is_private")
+    .select("is_private, name, created_by")
     .eq("id", groupId)
     .maybeSingle()
 
@@ -271,12 +271,21 @@ export async function requestToJoinGroupAction(groupId: string): Promise<ActionR
     return { error: "Couldn't send the request." }
   }
 
+  // Notify the group creator (we could also notify all group admins)
+  await supabase.rpc("notify_user", {
+    p_user_id: group.created_by,
+    p_type: "group_invite",
+    p_title: "New Join Request",
+    p_body: `Someone requested to join ${group.name}.`,
+    p_link: "/dashboard/groups",
+  })
+
   revalidatePath("/dashboard/groups")
   return { error: null }
 }
 
 export async function respondToGroupRequestAction(requestId: string, accept: boolean): Promise<ActionResult> {
-  const member = await requireMember()
+  await requireMember()
   const supabase = await createClient()
 
   const { data: request } = await supabase
@@ -300,6 +309,22 @@ export async function respondToGroupRequestAction(requestId: string, accept: boo
       role: "member",
     })
     if (joinError) return { error: "Couldn't add user to the group." }
+    
+    await supabase.rpc("notify_user", {
+      p_user_id: request.user_id,
+      p_type: "group_invite_accepted",
+      p_title: "Request Approved",
+      p_body: "Your request to join the group was approved.",
+      p_link: "/dashboard/groups",
+    })
+  } else {
+    await supabase.rpc("notify_user", {
+      p_user_id: request.user_id,
+      p_type: "group_invite_accepted", // reusing this type for now
+      p_title: "Request Declined",
+      p_body: "Your request to join the group was declined.",
+      p_link: "/dashboard/groups",
+    })
   }
 
   revalidatePath("/dashboard/groups")

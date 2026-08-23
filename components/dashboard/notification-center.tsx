@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import { useRouter } from "next/navigation"
 import { markNotificationReadAction, markAllNotificationsReadAction } from "@/lib/actions/notifications"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -49,6 +50,7 @@ export function NotificationCenter({
   userId: string
   initialUnread: number
 }) {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [unread, setUnread] = useState(initialUnread)
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -233,7 +235,7 @@ export function NotificationCenter({
                         if (!n.read) handleMarkRead(n.id)
                         if (n.link) {
                           setOpen(false)
-                          // Navigation is handled by Link below.
+                          router.push(n.link)
                         }
                       }}
                       className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-secondary/50 ${

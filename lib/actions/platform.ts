@@ -916,12 +916,12 @@ export async function updateOrderStatusAction(
 
   const notifyBuyer = async () => {
     if (["accepted", "rejected", "delivered"].includes(status)) {
-      await supabase.from("notifications").insert({
-        user_id: order.buyer_id,
-        type: "marketplace",
-        title: `Order ${status}`,
-        body: `Your order has been marked as ${status}.`,
-        link: `/dashboard/marketplace`,
+      await supabase.rpc("notify_user", {
+        p_user_id: order.buyer_id,
+        p_type: "marketplace",
+        p_title: `Order ${status}`,
+        p_body: `Your order has been marked as ${status}.`,
+        p_link: `/dashboard/marketplace`,
       })
     }
   }

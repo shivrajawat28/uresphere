@@ -355,13 +355,13 @@ export async function checkoutCartAction(formData: FormData): Promise<ActionResu
       const shopSellerIds = Array.from(new Set(shopOrders.map((o: { seller_id: string }) => o.seller_id)))
       
       for (const sellerId of shopSellerIds) {
-        notifications.push({
-          user_id: sellerId,
-          type: "marketplace",
-          title: "New Shop Order",
-          body: `You received a new shop order from ${buyerName}.`,
-          link: "/dashboard/marketplace/shop-admin"
-        })
+        notifications.push(supabase.rpc("notify_user", {
+          p_user_id: sellerId,
+          p_type: "marketplace",
+          p_title: "New Shop Order",
+          p_body: `You received a new shop order from ${buyerName}.`,
+          p_link: "/dashboard/marketplace/shop-admin"
+        }))
       }
       
       // Collect all admin IDs to notify (Super Admins + Sphere Admins)
@@ -375,17 +375,17 @@ export async function checkoutCartAction(formData: FormData): Promise<ActionResu
       }
 
       for (const adminId of adminIds) {
-        notifications.push({
-          user_id: adminId,
-          type: "marketplace",
-          title: "New Shop Order in Sphere",
-          body: `A new shop order was placed by ${buyerName}.`,
-          link: `/admin/spheres/${member.sphereId}`
-        })
+        notifications.push(supabase.rpc("notify_user", {
+          p_user_id: adminId,
+          p_type: "marketplace",
+          p_title: "New Shop Order in Sphere",
+          p_body: `A new shop order was placed by ${buyerName}.`,
+          p_link: `/admin/spheres/${member.sphereId}`
+        }))
       }
       
       if (notifications.length > 0) {
-        await supabase.from("notifications").insert(notifications)
+        await Promise.all(notifications)
       }
     }
   }
