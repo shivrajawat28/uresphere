@@ -13,22 +13,32 @@ export default function Page() {
 
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "WebApplication",
-    name: "ÙreSphere",
-    url: siteUrl,
-    applicationCategory: "SocialNetworkingApplication",
-    operatingSystem: "Web",
-    description: "A private, campus-verified community platform. Chat, trade, and organize with people who share your college — anonymously.",
-    offers: {
-      "@type": "Offer",
-      price: "0",
-      priceCurrency: "INR",
-    },
-    publisher: {
-      "@type": "Organization",
-      name: "ÙreSphere",
-      url: siteUrl,
-    },
+    "@graph": [
+      {
+        "@type": "WebSite",
+        name: "UreSphere",
+        url: siteUrl,
+      },
+      {
+        "@type": "Organization",
+        name: "UreSphere",
+        url: siteUrl,
+        logo: `${siteUrl}/favicon/android-chrome-512x512.png`,
+      },
+      {
+        "@type": "WebApplication",
+        name: "UreSphere",
+        url: siteUrl,
+        applicationCategory: "SocialNetworkingApplication",
+        operatingSystem: "Web",
+        description: "UreSphere is a campus-verified college community platform where students can chat, create groups, discover events, and buy and sell through the campus marketplace.",
+        offers: {
+          "@type": "Offer",
+          price: "0",
+          priceCurrency: "INR",
+        },
+      }
+    ]
   }
 
   return (

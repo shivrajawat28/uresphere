@@ -5,16 +5,16 @@ import { AboutContent } from "./about-content"
 import { getSiteUrl } from "@/lib/site-url"
 
 export const metadata: Metadata = {
-  title: "About | ÙreSphere",
+  title: "About UreSphere | Campus Community Platform",
   description:
-    "ÙreSphere is a campus platform where every college gets its own private Sphere. Read about why we built it, meet the team, work with us, or advertise on UreSphere.",
+    "Learn about UreSphere, the private campus platform where every college gets its own verified community. Meet the team and discover our mission.",
   alternates: {
     canonical: "/about",
   },
   openGraph: {
-    title: "About ÙreSphere",
+    title: "About UreSphere | Campus Community Platform",
     description:
-      "ÙreSphere is a campus platform where every college gets its own private Sphere. Read about why we built it, meet the team, work with us, or advertise on UreSphere.",
+      "Learn about UreSphere, the private campus platform where every college gets its own verified community. Meet the team and discover our mission.",
     type: "website",
     url: "/about",
   },
@@ -40,13 +40,14 @@ export default async function AboutPage() {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "AboutPage",
-    name: "About ÙreSphere",
+    name: "About UreSphere",
     url: `${siteUrl}/about`,
     mainEntity: {
       "@type": "Organization",
-      name: "ÙreSphere",
+      name: "UreSphere",
       url: siteUrl,
-      description: "A private, campus-verified community platform.",
+      description: "UreSphere is a campus-verified college community platform where students can chat, create groups, discover events, and buy and sell through the campus marketplace.",
+      logo: `${siteUrl}/favicon/android-chrome-512x512.png`,
     },
   }
 

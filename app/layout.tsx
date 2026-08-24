@@ -20,31 +20,31 @@ const geist = Geist({
 })
 
 export const metadata: Metadata = {
-  // Resolves to https://uresphere.in in production, http://localhost:3000 in
+  // Resolves to https://www.uresphere.in in production, http://localhost:3000 in
   // development. Never a Vercel preview domain (see lib/site-url.ts).
   metadataBase: getMetadataBase(),
   title: {
-    default: 'ÙreSphere — Your College, Connected',
-    template: '%s · ÙreSphere',
+    default: 'UreSphere — College Student Community, Campus Chat & Marketplace',
+    template: '%s | UreSphere',
   },
   description:
-    'ÙreSphere is a private, campus-verified community platform. Chat, trade, and organize with people who actually share your college — anonymously.',
+    'UreSphere is a campus-verified college community platform where students can chat, create groups, discover events, and buy and sell through the campus marketplace.',
   alternates: {
     canonical: '/',
   },
   openGraph: {
-    title: 'ÙreSphere — Your College, Connected',
+    title: 'UreSphere — College Student Community, Campus Chat & Marketplace',
     description:
-      'ÙreSphere is a private, campus-verified community platform. Chat, trade, and organize with people who actually share your college — anonymously.',
+      'UreSphere is a campus-verified college community platform where students can chat, create groups, discover events, and buy and sell through the campus marketplace.',
     type: 'website',
-    siteName: 'ÙreSphere',
+    siteName: 'UreSphere',
     url: '/',
     locale: 'en_IN',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'ÙreSphere — Your College, Connected',
-    description: 'ÙreSphere is a private, campus-verified community platform. Chat, trade, and organize with people who actually share your college — anonymously.',
+    title: 'UreSphere — College Student Community, Campus Chat & Marketplace',
+    description: 'UreSphere is a campus-verified college community platform where students can chat, create groups, discover events, and buy and sell through the campus marketplace.',
   },
   // Favicon package lives in /public/favicon/ (favicon.ico, favicon.svg,
   // favicon-96x96.png, apple-touch-icon.png, site.webmanifest).

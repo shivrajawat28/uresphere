@@ -32,8 +32,7 @@ export function AboutContent({ team, advertising }: Props) {
           Your campus, your Sphere
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground md:text-lg">
-          ÙreSphere is a private campus community built around one simple idea: your college deserves its own space.
-          Chat, discover, learn, join groups, explore events and trade with people from your campus — while your public identity stays anonymous. Nothing crosses into another Sphere.  
+          UreSphere is a campus-verified college community platform where students can chat, create groups, discover events and clubs, buy and sell through the campus marketplace, and connect with their college community.
           </p>
         </div>
       </section>

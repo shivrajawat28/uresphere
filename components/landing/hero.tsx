@@ -23,8 +23,7 @@ export function Hero() {
         </h1>
 
         <p className="mx-auto mt-7 max-w-xl text-base leading-relaxed text-muted-foreground md:text-lg">
-        A private space for the people you pass every day.
-        Chat, connect, trade, join groups, discover events and see what&apos;s happening around campus — without putting your real name out there.
+          UreSphere is a campus-verified college community platform where students can chat, create groups, discover events and clubs, buy and sell through the campus marketplace, and connect with their college community — anonymously.
         </p>
 
         <div className="mt-11 flex flex-col items-center justify-center gap-3 sm:flex-row">

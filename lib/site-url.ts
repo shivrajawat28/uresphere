@@ -25,7 +25,7 @@
  * leak into canonical output.
  */
 
-const PRODUCTION_DOMAIN = "uresphere.in"
+const PRODUCTION_DOMAIN = "www.uresphere.in"
 
 /** Returns a normalized `scheme://host[:port]` or null for invalid/unsupported input. */
 export function cleanOrigin(raw: string | null | undefined): string | null {
