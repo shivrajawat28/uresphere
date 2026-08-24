@@ -26,7 +26,7 @@ export function CtaFooter() {
           <div className="flex items-center gap-2">
             <UreSphereLogo className="h-5" wordmark />
           </div>
-          <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} ÙreSphere. Campus-verified, anonymous by design.</p>
+          <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} UreSphere. Campus-verified, anonymous by design.</p>
         </div>
       </footer>
     </>

@@ -21,7 +21,7 @@ export default async function PremiumPage() {
     <div className="mx-auto max-w-4xl px-4 py-8 md:px-8">
       <div className="mb-8 flex items-center gap-3">
         <Gem className="size-6 text-primary" />
-        <h1 className="text-pretty font-serif text-3xl font-semibold text-foreground">ÙreSphere Premium</h1>
+        <h1 className="text-pretty font-serif text-3xl font-semibold text-foreground">UreSphere Premium</h1>
         <Badge className="border-border/60 font-normal text-muted-foreground" variant="outline">
           Coming soon
         </Badge>

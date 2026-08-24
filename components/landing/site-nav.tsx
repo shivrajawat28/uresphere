@@ -21,7 +21,7 @@ export function SiteNav() {
   return (
     <header className="sticky top-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 md:px-8">
-        <Link href="/" aria-label="ÙreSphere home" className="flex items-center gap-2">
+        <Link href="/" aria-label="UreSphere home" className="flex items-center gap-2">
           <UreSphereLogo className="h-6" wordmark />
         </Link>
 

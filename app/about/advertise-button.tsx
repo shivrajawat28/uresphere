@@ -16,7 +16,7 @@ export function AdvertiseButton({ phone, email }: Props) {
     <>
       <Button size="lg" className="gap-2" onClick={() => setOpen(true)}>
         <Megaphone className="size-4" />
-        Advertise on ÙreSphere
+        Advertise on UreSphere
       </Button>
 
       {open && (
@@ -24,13 +24,13 @@ export function AdvertiseButton({ phone, email }: Props) {
           className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
-          aria-label="Advertise on ÙreSphere"
+          aria-label="Advertise on UreSphere"
           onClick={(e) => e.target === e.currentTarget && setOpen(false)}
         >
           <div className="w-full max-w-md rounded-lg border border-border bg-background p-6 shadow-xl">
             <div className="mb-4 flex items-start justify-between">
               <div>
-                <h3 className="font-serif text-xl text-foreground">Advertise anything on ÙreSphere</h3>
+                <h3 className="font-serif text-xl text-foreground">Advertise anything on UreSphere</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Reach students inside their campus Spheres. Get in touch and we&apos;ll set you up.
                 </p>

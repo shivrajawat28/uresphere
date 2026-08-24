@@ -50,7 +50,7 @@ export function PushNotificationManager() {
       <div className="flex flex-col gap-3">
         <div>
           <p className="font-serif text-sm font-medium text-foreground">
-            Stay updated on ÙreSphere
+            Stay updated on UreSphere
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Get notified when someone messages you or when activity happens in your groups.

@@ -5,16 +5,16 @@ import { CollegeRequestForm } from "./college-request-form"
 import { getSiteUrl } from "@/lib/site-url"
 
 export const metadata = {
-  title: "Request your college | ÙreSphere",
+  title: "Request your college | UreSphere",
   description:
-    "Can't find your college on ÙreSphere? Request it — our team will add it to the campus directory.",
+    "Can't find your college on UreSphere? Request it — our team will add it to the campus directory.",
   alternates: {
     canonical: "/request-college",
   },
   openGraph: {
-    title: "Request your college | ÙreSphere",
+    title: "Request your college | UreSphere",
     description:
-      "Can't find your college on ÙreSphere? Request it — our team will add it to the campus directory.",
+      "Can't find your college on UreSphere? Request it — our team will add it to the campus directory.",
     type: "website",
     url: "/request-college",
   },
@@ -25,9 +25,9 @@ export default function RequestCollegePage() {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "WebPage",
-    name: "Request your college on ÙreSphere",
+    name: "Request your college on UreSphere",
     url: `${siteUrl}/request-college`,
-    description: "Can't find your college on ÙreSphere? Request it — our team will add it to the campus directory.",
+    description: "Can't find your college on UreSphere? Request it — our team will add it to the campus directory.",
   }
 
   return (
@@ -51,7 +51,7 @@ export default function RequestCollegePage() {
 
         <h1 className="mb-2 font-serif text-3xl text-foreground text-balance">Request your college.</h1>
         <p className="mb-8 text-sm leading-relaxed text-muted-foreground">
-          Every campus on ÙreSphere is an officially managed Sphere. If yours isn&apos;t in the directory yet,
+          Every campus on UreSphere is an officially managed Sphere. If yours isn&apos;t in the directory yet,
           tell us about it and we&apos;ll bring it onboard.
         </p>
 

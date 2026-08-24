@@ -54,7 +54,7 @@ export function SphereExplainer() {
           The internet is huge, Your campus isn&apos;t
           </h2>
           <p className="text-base leading-relaxed text-muted-foreground">
-          ÙreSphere gives your campus&apos;s own private corner of the internet — built for the people who actually study, hang out and live there.
+          UreSphere gives your campus&apos;s own private corner of the internet — built for the people who actually study, hang out and live there.
 
 Talk freely, find your people, discover what&apos;s happening. Trade, join groups and share what matters — all without crossing into another campus.
           </p>
@@ -86,7 +86,7 @@ Talk freely, find your people, discover what&apos;s happening. Trade, join group
 
             {/* Center node stays stable and readable */}
             <div className="relative z-10 flex size-28 items-center justify-center rounded-full bg-primary/10 text-center">
-              <span className="font-serif text-sm italic text-primary">ÙreSphere</span>
+              <span className="font-serif text-sm italic text-primary">UreSphere</span>
             </div>
           </div>
         </div>

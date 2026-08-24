@@ -87,7 +87,7 @@ export function LoginForm() {
         </form>
 
         <p className="mt-8 text-center text-sm text-muted-foreground">
-          New to ÙreSphere?{" "}
+          New to UreSphere?{" "}
           <Link href="/auth/sign-up" className="text-foreground underline underline-offset-4 hover:text-primary">
             Create an account
           </Link>

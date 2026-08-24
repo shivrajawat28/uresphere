@@ -2,7 +2,7 @@ import Image from "next/image"
 import { cn } from "@/lib/utils"
 
 /**
- * Single source of truth for the ÙreSphere brand mark.
+ * Single source of truth for the UreSphere brand mark.
  *
  * The high-resolution logo lives at /public/brand/uresphere-logo.png (the
  * original asset — never recompressed or duplicated elsewhere). The component
@@ -16,24 +16,24 @@ import { cn } from "@/lib/utils"
  *    the fold),
  *  - accessible alt text, overridable per context.
  *
- * With `wordmark`, it renders the brand lockup `[logo] ÙreSphere` as one unit
+ * With `wordmark`, it renders the brand lockup `[logo] UreSphere` as one unit
  * (logo + text beside it, vertically aligned). The wordmark uses the site's
  * serif display font so it stays consistent in light and dark themes.
  *
  * Usage:
  *   <UreSphereLogo className="h-6" />
  *   <UreSphereLogo className="h-6" wordmark />
- *   <UreSphereLogo className="h-8" priority={false} alt="Back to ÙreSphere" />
+ *   <UreSphereLogo className="h-8" priority={false} alt="Back to UreSphere" />
  */
 export function UreSphereLogo({
   className,
   wordmark = false,
   wordmarkClassName,
-  alt = "ÙreSphere",
+  alt = "UreSphere",
   priority = true,
 }: {
   className?: string
-  /** Show the "ÙreSphere" wordmark beside the logo (brand lockup). */
+  /** Show the "UreSphere" wordmark beside the logo (brand lockup). */
   wordmark?: boolean
   /** Override the wordmark typography (defaults to the brand serif style). */
   wordmarkClassName?: string
@@ -45,7 +45,7 @@ export function UreSphereLogo({
       <Image
         src="/brand/uresphere-logo.png"
         // When the wordmark is shown it carries the accessible name, so the
-        // image is decorative to avoid announcing "ÙreSphere" twice.
+        // image is decorative to avoid announcing "UreSphere" twice.
         alt={wordmark ? "" : alt}
         // Intrinsic dimensions of the original high-res asset. `object-contain`
         // + h-auto keeps the true aspect ratio at any rendered size.
@@ -61,7 +61,7 @@ export function UreSphereLogo({
             wordmarkClassName,
           )}
         >
-          ÙreSphere
+          UreSphere
         </span>
       )}
     </span>

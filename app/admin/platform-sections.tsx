@@ -776,7 +776,7 @@ export function AdvertisingSection({ data }: { data: PlatformData["advertising"]
         Save contact details
       </Button>
       <p className="text-xs text-muted-foreground">
-        These appear in the “Advertise on ÙreSphere” modal on the About page.
+        These appear in the “Advertise on UreSphere” modal on the About page.
       </p>
     </form>
   )
@@ -1002,7 +1002,7 @@ export function ShopProductsSection({ sphereId, products }: { sphereId: string; 
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          Products shown in the ÙreSphere Shop tab — admin-created, same checkout flow as member listings.
+          Products shown in the UreSphere Shop tab — admin-created, same checkout flow as member listings.
         </p>
         <Button size="sm" variant="outline" className="gap-1.5" onClick={openCreate}>
           <Plus className="size-3.5" aria-hidden="true" />
