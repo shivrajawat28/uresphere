@@ -201,9 +201,9 @@ export default async function DashboardPage() {
         <h2 className="mb-3 font-serif text-lg font-medium text-foreground">Your Sphere</h2>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatCard icon={Users} label="Members" value={memberCount ?? 0} />
-          <StatCard icon={CalendarDays} label="Upcoming events" value={upcomingCount} />
-          <StatCard icon={Users} label="Groups" value={groupCount ?? 0} />
-          <StatCard icon={Sparkles} label="Clubs" value={clubCount ?? 0} />
+          <StatCard icon={CalendarDays} label="Upcoming events" value={upcomingCount} href="/dashboard/events" />
+          <StatCard icon={Users} label="Groups" value={groupCount ?? 0} href="/dashboard/groups" />
+          <StatCard icon={Sparkles} label="Clubs" value={clubCount ?? 0} href="/dashboard/clubs" />
         </div>
       </section>
 
@@ -371,13 +371,15 @@ function StatCard({
   icon: Icon,
   label,
   value,
+  href,
 }: {
   icon: typeof Users
   label: string
   value: number
+  href?: string
 }) {
-  return (
-    <Card className="border-border/70 bg-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm">
+  const content = (
+    <Card className={`border-border/70 bg-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm ${href ? "hover:border-primary/50" : ""}`}>
       <CardContent className="flex items-center gap-3 p-4">
         <div className="rounded-lg bg-primary/10 p-2">
           <Icon className="size-4 text-primary" aria-hidden="true" />
@@ -391,4 +393,14 @@ function StatCard({
       </CardContent>
     </Card>
   )
+
+  if (href) {
+    return (
+      <Link href={href} className="block outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-xl">
+        {content}
+      </Link>
+    )
+  }
+
+  return content
 }
