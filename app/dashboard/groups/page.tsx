@@ -54,7 +54,10 @@ export default async function GroupsPage({
   ])
 
   let incomingRequests: { id: string; user_id: string; handle: string; status: string }[] = []
-  if (group && groupMembersResult.data?.some((m) => m.user_id === member.userId && (m.role === "admin" || m.role === "super_admin"))) {
+  const isCreator = groupResult.data?.created_by === member.userId
+  const isAdmin = isCreator || (groupMembersResult.data?.some((m) => m.user_id === member.userId && (m.role === "admin" || m.role === "super_admin")) ?? false)
+  
+  if (group && isAdmin) {
     const { data: requestsData } = await supabase
       .from("group_requests")
       .select("id, user_id, status")
@@ -148,9 +151,7 @@ export default async function GroupsPage({
               isMember: Array.isArray(groupMembersResult.data)
                 ? groupMembersResult.data.some((m) => m.user_id === member.userId)
                 : false,
-              isAdmin: Array.isArray(groupMembersResult.data)
-                ? groupMembersResult.data.some((m) => m.user_id === member.userId && (m.role === "admin" || m.role === "super_admin"))
-                : false,
+              isAdmin,
             } : null}
             incomingRequests={incomingRequests}
             initialMessages={initialMessages}

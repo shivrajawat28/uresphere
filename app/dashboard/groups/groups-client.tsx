@@ -148,50 +148,6 @@ export function GroupsClient({
           </Button>
         </div>
 
-        {incomingRequests.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Join Requests</p>
-            {incomingRequests.map((req) => (
-              <Card key={req.id} className="border-border/70 bg-card">
-                <CardContent className="flex items-center justify-between gap-2 p-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{req.handle}</p>
-                    <p className="text-xs text-muted-foreground">wants to join</p>
-                  </div>
-                  <div className="flex shrink-0 gap-1.5">
-                    <form action={() => startTransition(async () => {
-                      const { respondToGroupRequestAction } = await import("@/lib/actions/groups")
-                      const result = await respondToGroupRequestAction(req.id, true)
-                      if (result.error) toast.error(result.error)
-                      else {
-                        toast.success("Request approved")
-                        router.refresh()
-                      }
-                    })}>
-                      <Button size="icon-sm" variant="outline" aria-label="Approve">
-                        <Check className="size-3.5 text-primary" />
-                      </Button>
-                    </form>
-                    <form action={() => startTransition(async () => {
-                      const { respondToGroupRequestAction } = await import("@/lib/actions/groups")
-                      const result = await respondToGroupRequestAction(req.id, false)
-                      if (result.error) toast.error(result.error)
-                      else {
-                        toast.success("Request rejected")
-                        router.refresh()
-                      }
-                    })}>
-                      <Button size="icon-sm" variant="ghost" aria-label="Decline">
-                        <X className="size-3.5" />
-                      </Button>
-                    </form>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-
         {pendingInvites.length > 0 && (
           <div className="space-y-2">
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Invitations</p>
@@ -268,14 +224,17 @@ export function GroupsClient({
       <div className={`flex-1 min-h-0 ${!activeGroup ? "hidden lg:flex" : "flex flex-col"}`}>
         {activeGroup ? (
           <GroupChat
-            key={activeGroup.id}
-            group={groups.find(g => g.id === activeGroup.id) ?? { ...activeGroup, description: "", is_private: false, created_at: "", memberCount: 0, hasPendingRequest: false }}
+            group={
+              groups.find((g) => g.id === activeGroup.id) ??
+              ({ ...activeGroup, description: "", is_private: false, created_at: "", memberCount: 0, hasPendingRequest: false } as GroupSummary)
+            }
+            currentUserId={currentUserId}
+            currentHandle={currentHandle}
             initialMessages={initialMessages}
             initialHasMore={initialHasMore}
             initialOldestCreatedAt={initialOldestCreatedAt}
-            currentUserId={currentUserId}
-            currentHandle={currentHandle}
-            isAdmin={isAdmin}
+            isAdmin={activeGroup.isAdmin}
+            incomingRequests={incomingRequests}
             onOpenInvite={() => setInviteOpen(true)}
           />
         ) : (
@@ -384,6 +343,7 @@ function GroupChat({
   currentUserId,
   currentHandle,
   isAdmin,
+  incomingRequests,
   onOpenInvite,
 }: {
   group: GroupSummary | { id: string; name: string; created_by: string; isMember: boolean; description: string; is_private: boolean; created_at: string; memberCount: number; hasPendingRequest: boolean }
@@ -393,6 +353,7 @@ function GroupChat({
   currentUserId: string
   currentHandle: string
   isAdmin: boolean
+  incomingRequests: { id: string; user_id: string; handle: string; status: string }[]
   onOpenInvite: () => void
 }) {
   const router = useRouter()
@@ -640,9 +601,9 @@ function GroupChat({
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="ghost">Cancel</Button>
-            </DialogClose>
+            <Button variant="outline" onClick={() => setLeaveOpen(false)} disabled={isPending}>
+              Cancel
+            </Button>
             <Button variant="destructive" onClick={handleLeave} disabled={isPending}>
               Leave group
             </Button>
@@ -650,25 +611,76 @@ function GroupChat({
         </DialogContent>
       </Dialog>
 
-      {/* Delete group — creator/admin only, destructive with confirmation */}
+      {/* Delete group */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete “{group.name}”?</DialogTitle>
             <DialogDescription>
-              This permanently deletes the group and its message history for everyone. This can&apos;t be undone.
+              This removes the group and all messages permanently. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="ghost">Cancel</Button>
-            </DialogClose>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={isPending}>
+              Cancel
+            </Button>
             <Button variant="destructive" onClick={handleDeleteGroup} disabled={isPending}>
               Delete group
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {isAdmin && incomingRequests.length > 0 && (
+        <div className="border-b border-border bg-muted/20 p-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Join Requests</p>
+          <div className="flex flex-col gap-2">
+            {incomingRequests.map((req) => (
+              <div key={req.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-background p-2.5 shadow-sm">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{req.handle}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <form action={() => startTransition(async () => {
+                    const { respondToGroupRequestAction } = await import("@/lib/actions/groups")
+                    const result = await respondToGroupRequestAction(req.id, true)
+                    if (result.error) toast.error(result.error)
+                    else {
+                      toast.success("Request approved")
+                      router.refresh()
+                    }
+                  })}>
+                    <Button type="submit" size="sm" className="h-8 gap-1" disabled={isPending}>
+                      {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+                      Accept
+                    </Button>
+                  </form>
+                  <form action={() => startTransition(async () => {
+                    const { respondToGroupRequestAction } = await import("@/lib/actions/groups")
+                    const result = await respondToGroupRequestAction(req.id, false)
+                    if (result.error) toast.error(result.error)
+                    else {
+                      toast.success("Request rejected")
+                      router.refresh()
+                    }
+                  })}>
+                    <Button type="submit" size="sm" variant="ghost" className="h-8 gap-1 text-muted-foreground hover:text-foreground" disabled={isPending}>
+                      <X className="size-3.5" />
+                      Reject
+                    </Button>
+                  </form>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {isAdmin && incomingRequests.length === 0 && !group.is_private && (
+        <div className="border-b border-border bg-muted/10 px-4 py-2">
+          <p className="text-xs text-muted-foreground">No pending join requests.</p>
+        </div>
+      )}
 
       {group.isMember ? (
         <>
