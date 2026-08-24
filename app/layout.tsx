@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   // development. Never a Vercel preview domain (see lib/site-url.ts).
   metadataBase: getMetadataBase(),
   title: {
-    default: 'ÙreSphere — Your Campus. Your Sphere. Your Community.',
+    default: 'ÙreSphere — Your College, Connected',
     template: '%s · ÙreSphere',
   },
   description:
@@ -33,9 +33,9 @@ export const metadata: Metadata = {
     canonical: '/',
   },
   openGraph: {
-    title: 'ÙreSphere — Your Campus. Your Sphere. Your Community.',
+    title: 'ÙreSphere — Your College, Connected',
     description:
-      'A private community drawn around your campus. Anonymous by design, scoped to your Sphere.',
+      'ÙreSphere is a private, campus-verified community platform. Chat, trade, and organize with people who actually share your college — anonymously.',
     type: 'website',
     siteName: 'ÙreSphere',
     url: '/',
@@ -43,8 +43,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'ÙreSphere — Your Campus. Your Sphere. Your Community.',
-    description: 'A private community drawn around your campus. Anonymous by design.',
+    title: 'ÙreSphere — Your College, Connected',
+    description: 'ÙreSphere is a private, campus-verified community platform. Chat, trade, and organize with people who actually share your college — anonymously.',
   },
   // Favicon package lives in /public/favicon/ (favicon.ico, favicon.svg,
   // favicon-96x96.png, apple-touch-icon.png, site.webmanifest).
