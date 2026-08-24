@@ -96,6 +96,9 @@ export function GroupsClient({
   const [inviteOpen, setInviteOpen] = useState(false)
   const [isPrivate, setIsPrivate] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const [isPendingNav, startNavTransition] = useTransition()
+  const [navigatingTo, setNavigatingTo] = useState<string | null>(null)
+  const router = useRouter()
 
   function handleCreate(formData: FormData) {
     startTransition(async () => {
@@ -104,6 +107,7 @@ export function GroupsClient({
       else {
         toast.success("Group created")
         setCreateOpen(false)
+        router.refresh()
       }
     })
   }
@@ -125,14 +129,17 @@ export function GroupsClient({
     startTransition(async () => {
       const result = await respondToInviteAction(inviteId, accept)
       if (result.error) toast.error(result.error)
-      else toast.success(accept ? "Joined the group" : "Invite declined")
+      else {
+        toast.success(accept ? "Joined the group" : "Invite declined")
+        router.refresh()
+      }
     })
   }
 
   return (
-    <div className="flex flex-col gap-6 lg:flex-row">
+    <div className={`flex flex-col gap-6 lg:flex-row ${activeGroup ? "flex-1 min-h-0" : ""}`}>
       {/* Sidebar: groups + invites */}
-      <div className="flex w-full flex-col gap-4 lg:w-80">
+      <div className={`w-full flex-col gap-4 lg:w-80 ${activeGroup ? "hidden lg:flex" : "flex"}`}>
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium text-foreground">Your groups</h2>
           <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setCreateOpen(true)}>
@@ -156,7 +163,10 @@ export function GroupsClient({
                       const { respondToGroupRequestAction } = await import("@/lib/actions/groups")
                       const result = await respondToGroupRequestAction(req.id, true)
                       if (result.error) toast.error(result.error)
-                      else toast.success("Request approved")
+                      else {
+                        toast.success("Request approved")
+                        router.refresh()
+                      }
                     })}>
                       <Button size="icon-sm" variant="outline" aria-label="Approve">
                         <Check className="size-3.5 text-primary" />
@@ -166,7 +176,10 @@ export function GroupsClient({
                       const { respondToGroupRequestAction } = await import("@/lib/actions/groups")
                       const result = await respondToGroupRequestAction(req.id, false)
                       if (result.error) toast.error(result.error)
-                      else toast.success("Request rejected")
+                      else {
+                        toast.success("Request rejected")
+                        router.refresh()
+                      }
                     })}>
                       <Button size="icon-sm" variant="ghost" aria-label="Decline">
                         <X className="size-3.5" />
@@ -210,58 +223,68 @@ export function GroupsClient({
             </p>
           )}
           {groups.map((group) => (
-            <Link
+            <div
               key={group.id}
-              href={`/dashboard/groups?group=${group.id}`}
-              className={`flex items-start justify-between gap-2 rounded-lg border px-3 py-2.5 transition-colors ${
+              onClick={(e) => {
+                e.preventDefault()
+                setNavigatingTo(group.id)
+                startNavTransition(() => {
+                  router.push(`/dashboard/groups?group=${group.id}`)
+                })
+              }}
+              className={`flex items-start justify-between gap-2 rounded-lg border px-3 py-2.5 transition-colors cursor-pointer ${
                 activeGroup?.id === group.id
                   ? "border-primary/40 bg-primary/8"
                   : "border-border/70 hover:bg-secondary"
               }`}
             >
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-foreground">{group.name}</p>
                 <p className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Users className="size-3" />
                   {group.memberCount} member{group.memberCount === 1 ? "" : "s"}
                 </p>
               </div>
-              {group.isMember ? (
-                <Badge variant="outline" className="shrink-0 border-border/60 text-[10px] font-normal">
-                  Joined
-                </Badge>
-              ) : group.is_private ? (
-                <Badge variant="secondary" className="shrink-0 border-border/60 text-[10px] font-normal bg-secondary">
-                  Private
-                </Badge>
-              ) : null}
-            </Link>
+              <div className="flex items-center gap-2">
+                {isPendingNav && navigatingTo === group.id && (
+                  <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+                )}
+                {group.isMember ? (
+                  <Badge variant="outline" className="shrink-0 border-border/60 text-[10px] font-normal">
+                    Joined
+                  </Badge>
+                ) : group.is_private ? (
+                  <Badge variant="secondary" className="shrink-0 border-border/60 text-[10px] font-normal bg-secondary">
+                    Private
+                  </Badge>
+                ) : null}
+              </div>
+            </div>
           ))}
         </div>
       </div>
 
       {/* Chat pane — remounted per group so state resets cleanly */}
-      {activeGroup ? (
-        <GroupChat
-          key={activeGroup.id}
-          group={groups.find(g => g.id === activeGroup.id) ?? { ...activeGroup, description: "", is_private: false, created_at: "", memberCount: 0, hasPendingRequest: false }}
-          initialMessages={initialMessages}
-          initialHasMore={initialHasMore}
-          initialOldestCreatedAt={initialOldestCreatedAt}
-          currentUserId={currentUserId}
-          currentHandle={currentHandle}
-          isAdmin={isAdmin}
-          onOpenInvite={() => setInviteOpen(true)}
-        />
-      ) : (
-        <div className="flex min-h-[60svh] flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-border bg-card p-8 text-center lg:h-[70svh]">
-          <MessageCircle className="size-8 text-muted-foreground/50" />
-          <p className="font-serif text-lg text-foreground">Select a group to start chatting</p>
-          <p className="max-w-sm text-sm text-muted-foreground">
-            Only accepted members can see or send messages in a group.
-          </p>
-        </div>
-      )}
+      <div className={`flex-1 min-h-0 ${!activeGroup ? "hidden lg:flex" : "flex flex-col"}`}>
+        {activeGroup ? (
+          <GroupChat
+            key={activeGroup.id}
+            group={groups.find(g => g.id === activeGroup.id) ?? { ...activeGroup, description: "", is_private: false, created_at: "", memberCount: 0, hasPendingRequest: false }}
+            initialMessages={initialMessages}
+            initialHasMore={initialHasMore}
+            initialOldestCreatedAt={initialOldestCreatedAt}
+            currentUserId={currentUserId}
+            currentHandle={currentHandle}
+            isAdmin={isAdmin}
+            onOpenInvite={() => setInviteOpen(true)}
+          />
+        ) : (
+          <div className="flex h-[calc(100dvh-6.5rem)] lg:h-[70svh] w-full flex-col items-center justify-center rounded-xl border border-dashed border-border/60 bg-card/30">
+            <MessageCircle className="mb-2 size-8 text-muted-foreground/50" />
+            <p className="text-sm font-medium text-muted-foreground">Select a group to start chatting</p>
+          </div>
+        )}
+      </div>
 
       {/* Create group dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -576,7 +599,7 @@ function GroupChat({
   }
 
   return (
-    <div className="flex min-h-[60svh] flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card lg:h-[70svh]">
+    <div className="flex h-[calc(100dvh-6.5rem)] lg:h-full w-full flex-col overflow-hidden rounded-xl border border-border bg-card">
       <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -586,20 +609,20 @@ function GroupChat({
           <p className="text-xs text-muted-foreground">Private group chat in your Sphere</p>
         </div>
         {group.isMember && (
-          <div className="flex shrink-0 gap-1.5">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:flex-nowrap">
             <GroupMuteButton groupId={group.id} />
             <Button size="sm" variant="outline" className="gap-1.5" onClick={onOpenInvite}>
               <UserPlus className="size-3.5" />
-              Invite
+              <span className="hidden sm:inline">Invite</span>
             </Button>
             <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setLeaveOpen(true)}>
               <LogOut className="size-3.5" />
-              Leave
+              <span className="hidden sm:inline">Leave</span>
             </Button>
             {canDeleteGroup && (
               <Button size="sm" variant="destructive" className="gap-1.5" onClick={() => setDeleteOpen(true)}>
                 <Trash2 className="size-3.5" />
-                Delete group
+                <span className="hidden sm:inline">Delete group</span>
               </Button>
             )}
           </div>
@@ -755,7 +778,10 @@ function GroupChat({
                   const { requestToJoinGroupAction } = await import("@/lib/actions/groups")
                   const result = await requestToJoinGroupAction(group.id)
                   if (result.error) toast.error(result.error)
-                  else toast.success("Join request sent")
+                  else {
+                    toast.success("Join request sent")
+                    router.refresh()
+                  }
                 })}>
                   <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
                     Request to join

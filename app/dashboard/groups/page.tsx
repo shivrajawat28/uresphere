@@ -117,8 +117,8 @@ export default async function GroupsPage({
     )
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 md:px-8">
-      <div className="mb-8">
+    <div className={`mx-auto max-w-5xl md:px-8 ${activeGroup ? "h-[calc(100dvh-6.5rem)] flex flex-col -mb-12 md:mb-0 md:h-svh pt-2 md:py-8" : "px-4 py-8"}`}>
+      <div className={`mb-8 ${activeGroup ? "hidden md:block" : ""}`}>
         <h1 className="text-pretty font-serif text-3xl font-semibold text-foreground">Groups</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Private chat rooms for study groups, project teams, and friends — scoped to {member.sphereName}.
@@ -126,40 +126,42 @@ export default async function GroupsPage({
       </div>
 
       {/* Sponsored banner — Social placement */}
-      <div className="mb-6">
+      <div className={`mb-6 ${activeGroup ? "hidden md:block" : ""}`}>
         <AdBanner placement="social" limit={1} />
       </div>
 
-      <Suspense>
-        <GroupsClient
-          groups={groups}
-          pendingInvites={(invitesResult.data ?? []).map((i) => ({
-            id: i.id,
-            groupId: i.group_id,
-            groupName:
-              (Array.isArray(i.groups) ? (i.groups[0] as { name?: string } | null)?.name : (i.groups as { name?: string } | null)?.name) ??
-              "Unknown group",
-          }))}
-          activeGroup={activeGroup ? {
-            id: groupResult.data?.id ?? "",
-            name: groupResult.data?.name ?? "",
-            created_by: groupResult.data?.created_by ?? "",
-            isMember: Array.isArray(groupMembersResult.data)
-              ? groupMembersResult.data.some((m) => m.user_id === member.userId)
-              : false,
-            isAdmin: Array.isArray(groupMembersResult.data)
-              ? groupMembersResult.data.some((m) => m.user_id === member.userId && (m.role === "admin" || m.role === "super_admin"))
-              : false,
-          } : null}
-          incomingRequests={incomingRequests}
-          initialMessages={initialMessages}
-          initialHasMore={initialHasMore}
-          initialOldestCreatedAt={initialOldestCreatedAt}
-          currentUserId={member.userId}
-          currentHandle={member.anonymousHandle}
-          isAdmin={member.role === "admin" || member.role === "super_admin"}
-        />
-      </Suspense>
+      <div className={activeGroup ? "min-h-0 flex-1 flex flex-col" : ""}>
+        <Suspense>
+          <GroupsClient
+            groups={groups}
+            pendingInvites={(invitesResult.data ?? []).map((i) => ({
+              id: i.id,
+              groupId: i.group_id,
+              groupName:
+                (Array.isArray(i.groups) ? (i.groups[0] as { name?: string } | null)?.name : (i.groups as { name?: string } | null)?.name) ??
+                "Unknown group",
+            }))}
+            activeGroup={activeGroup ? {
+              id: groupResult.data?.id ?? "",
+              name: groupResult.data?.name ?? "",
+              created_by: groupResult.data?.created_by ?? "",
+              isMember: Array.isArray(groupMembersResult.data)
+                ? groupMembersResult.data.some((m) => m.user_id === member.userId)
+                : false,
+              isAdmin: Array.isArray(groupMembersResult.data)
+                ? groupMembersResult.data.some((m) => m.user_id === member.userId && (m.role === "admin" || m.role === "super_admin"))
+                : false,
+            } : null}
+            incomingRequests={incomingRequests}
+            initialMessages={initialMessages}
+            initialHasMore={initialHasMore}
+            initialOldestCreatedAt={initialOldestCreatedAt}
+            currentUserId={member.userId}
+            currentHandle={member.anonymousHandle}
+            isAdmin={member.role === "admin" || member.role === "super_admin"}
+          />
+        </Suspense>
+      </div>
     </div>
   )
 }

@@ -261,13 +261,12 @@ export async function requestToJoinGroupAction(groupId: string): Promise<ActionR
   if (!group) return { error: "Group not found." }
   if (group.is_private) return { error: "You cannot request to join a private group." }
 
-  const { error } = await supabase.from("group_requests").insert({
-    group_id: groupId,
-    user_id: member.userId,
-  })
+  const { error } = await supabase.from("group_requests").upsert(
+    { group_id: groupId, user_id: member.userId, status: "pending", created_at: new Date().toISOString() },
+    { onConflict: "group_id,user_id" }
+  )
 
   if (error) {
-    if (String(error.message).includes("duplicate")) return { error: "Request already pending." }
     return { error: "Couldn't send the request." }
   }
 
