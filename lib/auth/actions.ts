@@ -80,8 +80,8 @@ export async function signUpAction(formData: FormData): Promise<SignUpResult> {
   // ONE PHONE = ONE ACCOUNT. The DB has a partial unique index on
   // profiles.phone; this server-side check gives a friendly error first and
   // the index is the hard backstop against races.
-  const { data: existingPhone } = await supabase.from("profiles").select("id").eq("phone", normalizedPhone).maybeSingle()
-  if (existingPhone) {
+  const { data: phoneExists } = await supabase.rpc("check_phone_exists", { p_phone: normalizedPhone })
+  if (phoneExists) {
     return { error: "This phone number is already linked to an account. Try signing in.", needsEmailConfirmation: false }
   }
 
