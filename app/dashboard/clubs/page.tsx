@@ -50,7 +50,6 @@ export default async function ClubsPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {clubs.map((club) => {
-            const memberCount = Array.isArray(club.club_members) ? club.club_members.length : 0
             const categoryLabel = CATEGORY_LABELS[club.category ?? "other"] ?? "Other"
             const upcomingEvents = Array.isArray(club.club_events)
               ? club.club_events.filter((e: { event_date: string | null }) => !e.event_date || e.event_date >= today).length
@@ -82,10 +81,6 @@ export default async function ClubsPage() {
 
                   <div className="mb-2 flex flex-wrap gap-1.5">
                     <Badge variant="secondary" className="text-[10px]">{categoryLabel}</Badge>
-                    <Badge variant="outline" className="text-[10px] border-border/60">
-                      <Users className="mr-1 size-2.5" />
-                      {memberCount} member{memberCount === 1 ? "" : "s"}
-                    </Badge>
                     {upcomingEvents > 0 && (
                       <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
                         {upcomingEvents} upcoming event{upcomingEvents === 1 ? "" : "s"}
