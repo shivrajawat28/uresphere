@@ -440,7 +440,7 @@ function GroupChat({
         toast.error("Couldn't load earlier messages.")
         return
       }
-      const rows = (data ?? []).reverse()
+      const rows = (data ?? []).reverse().filter((r) => !r.is_deleted)
       const authorIds = Array.from(new Set(rows.map((r) => r.author_id)))
       const handleMap = new Map<string, string>()
       if (authorIds.length > 0) {
@@ -494,29 +494,39 @@ function GroupChat({
             created_at: string
             is_deleted: boolean
           }
-          const cachedHandle = handleCache.current.get(row.author_id)
-          const handle =
-            cachedHandle ??
-            (await supabase
-              .from("user_spheres")
-              .select("anonymous_handle")
-              .eq("user_id", row.author_id)
-              .maybeSingle())?.data?.anonymous_handle ??
-            "Unknown"
-          handleCache.current.set(row.author_id, handle)
-          // Dedupe by id + keep chronological order (same helper as Sphere chat).
-          setMessages((prev) =>
-            mergeChatMessages(prev, [
-              {
-                id: row.id,
-                body: row.body,
-                authorId: row.author_id,
-                createdAt: row.created_at,
-                isDeleted: row.is_deleted,
-                authorHandle: handle,
-              },
-            ]),
-          )
+            const cachedHandle = handleCache.current.get(row.author_id)
+            const handle =
+              cachedHandle ??
+              (await supabase
+                .from("user_spheres")
+                .select("anonymous_handle")
+                .eq("user_id", row.author_id)
+                .maybeSingle())?.data?.anonymous_handle ??
+              "Unknown"
+            handleCache.current.set(row.author_id, handle)
+            // Dedupe by id + keep chronological order (same helper as Sphere chat).
+            setMessages((prev) =>
+              mergeChatMessages(prev, [
+                {
+                  id: row.id,
+                  body: row.body,
+                  authorId: row.author_id,
+                  createdAt: row.created_at,
+                  isDeleted: row.is_deleted,
+                  authorHandle: handle,
+                },
+              ]),
+            )
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "group_messages", filter: `group_id=eq.${group.id}` },
+        (payload) => {
+          const row = payload.new as { id: string; is_deleted: boolean }
+          if (row.is_deleted) {
+            setMessages((prev) => prev.filter((m) => m.id !== row.id))
+          }
         },
       )
       .subscribe()
@@ -552,10 +562,11 @@ function GroupChat({
   }
 
   function handleDeleteMessage(id: string) {
+    // Optimistically remove the message from the UI
+    setMessages((prev) => prev.filter((m) => m.id !== id))
     startTransition(async () => {
       const result = await deleteGroupMessageAction(id)
       if (result.error) toast.error(result.error)
-      else toast.success("Message removed")
     })
   }
 
@@ -721,17 +732,15 @@ function GroupChat({
                         {new Date(m.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                       </span>
                     </div>
-                    <div className="flex max-w-[85%] items-start gap-1">
+                    <div className="flex min-w-0 max-w-[85%] items-start gap-1">
                       <div
-                        className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-                          m.isDeleted
-                            ? "border border-dashed border-border italic text-muted-foreground"
-                            : isSelf
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-secondary text-foreground"
+                        className={`break-words whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                          isSelf
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-secondary text-foreground"
                         }`}
                       >
-                        {m.isDeleted ? "Message deleted by admin" : m.body}
+                        {m.body}
                       </div>
                       {!m.isDeleted && (isSelf || isAdmin) && (
                         <button
@@ -750,7 +759,7 @@ function GroupChat({
           </div>
 
           <form onSubmit={handleSend} className="border-t border-border px-4 py-3">
-            <div className="mx-auto flex max-w-2xl items-end gap-2">
+            <div className="mx-auto flex min-w-0 max-w-2xl items-end gap-2">
               <Textarea
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}

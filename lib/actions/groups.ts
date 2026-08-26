@@ -458,7 +458,7 @@ export async function deleteGroupMessageAction(messageId: string): Promise<Actio
     if (!isAdmin) return { error: "You can only delete your own messages." }
   }
 
-  const { error } = await supabase.from("group_messages").update({ is_deleted: true }).eq("id", messageId)
+  const { error } = await supabase.from("group_messages").update({ is_deleted: true, body: "" }).eq("id", messageId)
   if (error) return { error: "Couldn't delete the message." }
 
   revalidatePath("/dashboard/groups")
