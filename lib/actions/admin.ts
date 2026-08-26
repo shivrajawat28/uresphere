@@ -1032,6 +1032,54 @@ export async function createClubEventAction(formData: FormData): Promise<ActionR
   return { error: null }
 }
 
+export async function updateClubEventAction(formData: FormData): Promise<ActionResult> {
+  const supabase = await createClient()
+  const id = String(formData.get("id") ?? "")
+  const clubId = String(formData.get("clubId") ?? "")
+  const title = String(formData.get("title") ?? "").trim()
+  const description = String(formData.get("description") ?? "").trim()
+  const date = String(formData.get("date") ?? "") || null
+  const time = String(formData.get("time") ?? "") || null
+  const venue = String(formData.get("venue") ?? "").trim()
+  const organizer = String(formData.get("organizer") ?? "").trim()
+  const contactName = String(formData.get("contactName") ?? "").trim()
+  const contactPhone = String(formData.get("contactPhone") ?? "").trim()
+  const contactEmail = String(formData.get("contactEmail") ?? "").trim()
+  const registrationUrl = String(formData.get("registrationUrl") ?? "").trim()
+  const registrationDeadline = String(formData.get("registrationDeadline") ?? "") || null
+  const thumbnailUrl = String(formData.get("thumbnailUrl") ?? "").trim() || null
+
+  if (!id) return { error: "Missing event ID." }
+  if (!clubId) return { error: "Missing club." }
+  if (title.length < 1 || title.length > 200) return { error: "Title must be 1–200 characters." }
+
+  const { data: club } = await supabase.from("clubs").select("id, sphere_id").eq("id", clubId).maybeSingle()
+  if (!club) return { error: "Club not found." }
+
+  const gate = await requireSphereAction(club.sphere_id, "events.update")
+  if (!gate.ok) return gate
+
+  const { error } = await supabase.from("club_events").update({
+    title,
+    description,
+    event_date: date,
+    event_time: time,
+    venue,
+    organizer,
+    contact_name: contactName,
+    contact_phone: contactPhone,
+    contact_email: contactEmail,
+    registration_url: registrationUrl,
+    registration_deadline: registrationDeadline,
+    thumbnail_url: thumbnailUrl,
+  }).eq("id", id)
+  if (error) return { error: "Couldn't update the club event." }
+
+  for (const p of spherePaths(club.sphere_id)) revalidatePath(p)
+  revalidatePath("/dashboard/clubs")
+  return { error: null }
+}
+
 export async function deleteClubEventAction(eventId: string): Promise<ActionResult> {
   const supabase = await createClient()
   const { data: event } = await supabase.from("club_events").select("id, club_id, clubs(sphere_id)").eq("id", eventId).maybeSingle()

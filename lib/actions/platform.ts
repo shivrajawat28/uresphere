@@ -1036,49 +1036,12 @@ export async function assignRoleAction(formData: FormData): Promise<ActionResult
     scope.club_id = clubId
   }
   if (role === "academic_manager" && sections && sections.length > 0) {
-    // MERGE sections: if the user already has an academic_manager assignment,
-    // combine the new sections with existing ones to avoid overwriting.
-    const { data: existing } = await supabase
-      .from("role_assignments")
-      .select("scope")
-      .eq("user_id", targetUserId)
-      .eq("sphere_id", sphereId)
-      .eq("role", role)
-      .maybeSingle()
-
-    let mergedSections = sections
-    if (existing?.scope && typeof existing.scope === "object") {
-      const existingScope = existing.scope as Record<string, unknown>
-      const existingSections: { degree: string; year: string; branch: string }[] =
-        Array.isArray(existingScope.sections)
-          ? (existingScope.sections as { degree?: unknown; year?: unknown; branch?: unknown }[]).map((s) => ({
-              degree: String(s.degree ?? "").trim(),
-              year: String(s.year ?? "").trim(),
-              branch: String(s.branch ?? "").trim(),
-            }))
-          : []
-
-      if (existingSections.length > 0) {
-        // Merge: add new sections that don't already exist.
-        mergedSections = [...existingSections]
-        for (const s of sections) {
-          const isDuplicate = mergedSections.some(
-            (e) =>
-              e.degree.toLowerCase() === s.degree.toLowerCase() &&
-              e.year.toLowerCase() === s.year.toLowerCase() &&
-              e.branch.toLowerCase() === s.branch.toLowerCase(),
-          )
-          if (!isDuplicate) mergedSections.push(s)
-        }
-      }
-    }
-
-    scope.sections = mergedSections
+    scope.sections = sections
     // Keep the legacy scalar fields = first section so older SQL checks
     // (has_permission scalar path) keep working for that section.
-    scope.degree = mergedSections[0].degree
-    scope.year = mergedSections[0].year
-    scope.branch = mergedSections[0].branch
+    scope.degree = sections[0].degree
+    scope.year = sections[0].year
+    scope.branch = sections[0].branch
   } else {
     if (degree) scope.degree = degree
     if (year) scope.year = year

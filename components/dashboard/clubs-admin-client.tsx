@@ -12,7 +12,7 @@ import { FileUpload } from "@/components/ui/file-upload"
 import {
   createClubAction, deleteClubAction, updateClubAction,
   createClubActivityAction, deleteClubActivityAction,
-  createClubEventAction, deleteClubEventAction,
+  createClubEventAction, deleteClubEventAction, updateClubEventAction,
   getEventRegistrations, getEventGalleryItems,
 } from "@/lib/actions/admin"
 import { EventGalleryManager, type GalleryItem } from "@/components/event-gallery-manager"
@@ -53,6 +53,7 @@ type ClubEventRow = {
   contact_phone: string
   contact_email: string
   registration_url: string
+  registration_deadline: string | null
   thumbnail_url: string | null
   registration_count?: number
   club_id: string
@@ -81,6 +82,7 @@ export function ClubsAdminClient({
   const [expandedClub, setExpandedClub] = useState<string | null>(initialExpandedClub ?? null)
   const [showAddActivity, setShowAddActivity] = useState(false)
   const [showAddEvent, setShowAddEvent] = useState(false)
+  const [editingEventId, setEditingEventId] = useState<string | null>(null)
   const [galleryTarget, setGalleryTarget] = useState<{ eventId: string; eventTitle: string; source: "club" | "activity" } | null>(null)
   const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([])
   const [viewingRegs, setViewingRegs] = useState<{ eventId: string; eventTitle: string } | null>(null)
@@ -235,7 +237,7 @@ export function ClubsAdminClient({
                       <div className="flex items-center justify-between mb-2">
                         <h3 className="text-sm font-medium text-foreground">Club Events</h3>
                         <Button size="sm" variant="ghost" className="gap-1 text-xs"
-                          onClick={() => { setShowAddEvent(true); setExpandedClub(club.id) }}>
+                          onClick={() => { setShowAddEvent(true); setEditingEventId(null); setExpandedClub(club.id) }}>
                           <Plus className="size-3" />Add Event
                         </Button>
                       </div>
@@ -258,6 +260,10 @@ export function ClubsAdminClient({
                                 <Button size="icon-sm" variant="ghost" disabled={isPending}
                                   onClick={() => loadRegistrations(e.id, e.title)}>
                                   <Users className="size-3 text-muted-foreground" />
+                                </Button>
+                                <Button size="icon-sm" variant="ghost" disabled={isPending}
+                                  onClick={() => { setEditingEventId(e.id); setShowAddEvent(true); setExpandedClub(club.id) }}>
+                                  <Pencil className="size-3 text-muted-foreground" />
                                 </Button>
                                 <Button size="icon-sm" variant="ghost" disabled={isPending}
                                   onClick={() => loadGallery(e.id, e.title, "club")}>
@@ -285,13 +291,14 @@ export function ClubsAdminClient({
                       />
                     )}
 
-                    {/* Add Event Form */}
+                    {/* Add/Edit Event Form */}
                     {showAddEvent && expandedClub === club.id && (
                       <ClubEventForm
                         clubId={club.id}
+                        initial={clubEvents.find(e => e.id === editingEventId)}
                         isPending={isPending}
-                        onClose={() => setShowAddEvent(false)}
-                        onSubmit={(fd) => run(async () => { const r = await createClubEventAction(fd); if (!r.error) setShowAddEvent(false); return r }, "Event created")}
+                        onClose={() => { setShowAddEvent(false); setEditingEventId(null) }}
+                        onSubmit={(fd) => run(async () => { const r = editingEventId ? await updateClubEventAction(fd) : await createClubEventAction(fd); if (!r.error) { setShowAddEvent(false); setEditingEventId(null) }; return r }, editingEventId ? "Event updated" : "Event created")}
                       />
                     )}
                   </div>
@@ -463,36 +470,36 @@ function ActivityForm({ clubId, isPending, onClose, onSubmit }: {
 }
 
 // --- Club Event Form ---
-function ClubEventForm({ clubId, isPending, onClose, onSubmit }: {
-  clubId: string; isPending: boolean; onClose: () => void; onSubmit: (fd: FormData) => void
+function ClubEventForm({ clubId, initial, isPending, onClose, onSubmit }: {
+  clubId: string; initial?: ClubEventRow; isPending: boolean; onClose: () => void; onSubmit: (fd: FormData) => void
 }) {
   const [busy, startTransition] = useTransition()
-  const [thumb, setThumb] = useState("")
-  const [isComingSoon, setIsComingSoon] = useState(false)
+  const [thumb, setThumb] = useState(initial?.thumbnail_url ?? "")
+  const [isComingSoon, setIsComingSoon] = useState(!initial?.event_date && !!initial)
   return (
-    <form onSubmit={(e) => { e.preventDefault(); const fd = new FormData(e.currentTarget); fd.set("clubId", clubId); fd.set("thumbnailUrl", thumb); if (isComingSoon) fd.set("date", ""); startTransition(() => onSubmit(fd)) }}
+    <form onSubmit={(e) => { e.preventDefault(); const fd = new FormData(e.currentTarget); fd.set("clubId", clubId); fd.set("thumbnailUrl", thumb); if (initial) fd.set("id", initial.id); if (isComingSoon) fd.set("date", ""); startTransition(() => onSubmit(fd)) }}
       className="grid gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4 sm:grid-cols-2">
-      <p className="sm:col-span-2 text-xs font-medium text-foreground">Add Club Event</p>
-      <div className="space-y-1.5 sm:col-span-2"><Label>Event Title</Label><Input name="title" required maxLength={200} placeholder="Hackathon 2026" /></div>
+      <p className="sm:col-span-2 text-xs font-medium text-foreground">{initial ? "Edit Club Event" : "Add Club Event"}</p>
+      <div className="space-y-1.5 sm:col-span-2"><Label>Event Title</Label><Input name="title" required maxLength={200} defaultValue={initial?.title ?? ""} placeholder="Hackathon 2026" /></div>
       <div className="flex items-center gap-2 sm:col-span-2">
         <input type="checkbox" id="ceComingSoon" checked={isComingSoon} onChange={(e) => setIsComingSoon(e.target.checked)} className="size-4" />
         <Label htmlFor="ceComingSoon" className="text-sm font-normal">Coming Soon — date TBA</Label>
       </div>
       {!isComingSoon && (<>
-        <div className="space-y-1.5"><Label>Date</Label><Input name="date" type="date" /></div>
-        <div className="space-y-1.5"><Label>Time</Label><Input name="time" type="time" /></div>
+        <div className="space-y-1.5"><Label>Date</Label><Input name="date" type="date" defaultValue={initial?.event_date ?? ""} /></div>
+        <div className="space-y-1.5"><Label>Time</Label><Input name="time" type="time" defaultValue={initial?.event_time ?? ""} /></div>
       </>)}
-      <div className="space-y-1.5"><Label>Venue</Label><Input name="venue" placeholder="Auditorium" /></div>
-      <div className="space-y-1.5"><Label>Organizer</Label><Input name="organizer" placeholder="Coding Club" /></div>
-      <div className="space-y-1.5 sm:col-span-2"><Label>Description</Label><Textarea name="description" rows={2} /></div>
-      <div className="space-y-1.5"><Label>Contact Name</Label><Input name="contactName" /></div>
-      <div className="space-y-1.5"><Label>Contact Phone</Label><Input name="contactPhone" /></div>
-      <div className="space-y-1.5"><Label>Contact Email</Label><Input name="contactEmail" type="email" /></div>
-      <div className="space-y-1.5 sm:col-span-2"><Label>Registration URL (Google Form etc.)</Label><Input name="registrationUrl" placeholder="https://forms.google.com/..." /></div>
-      <div className="space-y-1.5"><Label>Registration Deadline</Label><Input name="registrationDeadline" type="date" /></div>
+      <div className="space-y-1.5"><Label>Venue</Label><Input name="venue" defaultValue={initial?.venue ?? ""} placeholder="Auditorium" /></div>
+      <div className="space-y-1.5"><Label>Organizer</Label><Input name="organizer" defaultValue={initial?.organizer ?? ""} placeholder="Coding Club" /></div>
+      <div className="space-y-1.5 sm:col-span-2"><Label>Description</Label><Textarea name="description" rows={2} defaultValue={initial?.description ?? ""} /></div>
+      <div className="space-y-1.5"><Label>Contact Name</Label><Input name="contactName" defaultValue={initial?.contact_name ?? ""} /></div>
+      <div className="space-y-1.5"><Label>Contact Phone</Label><Input name="contactPhone" defaultValue={initial?.contact_phone ?? ""} /></div>
+      <div className="space-y-1.5"><Label>Contact Email</Label><Input name="contactEmail" type="email" defaultValue={initial?.contact_email ?? ""} /></div>
+      <div className="space-y-1.5 sm:col-span-2"><Label>Registration URL (Google Form etc.)</Label><Input name="registrationUrl" defaultValue={initial?.registration_url ?? ""} placeholder="https://forms.google.com/..." /></div>
+      <div className="space-y-1.5"><Label>Registration Deadline</Label><Input name="registrationDeadline" type="date" defaultValue={initial?.registration_deadline ?? ""} /></div>
       <div className="space-y-1.5 sm:col-span-2">
         <Label>Thumbnail</Label>
-        <FileUpload value={thumb} onChange={(v) => setThumb(v as string)} label="Event thumbnail" />
+        <FileUpload value={thumb} onChange={(v) => setThumb(typeof v === "string" ? v : (v[0] ?? ""))} label="Event thumbnail" />
       </div>
       <div className="flex gap-2 sm:col-span-2">
         <Button type="submit" size="sm" disabled={busy || isPending} className="gap-2">

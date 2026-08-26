@@ -99,7 +99,7 @@ export default async function ClubsAdminPage(
   const { data: clubEvents } = clubIds.length
     ? await supabase
         .from("club_events")
-        .select("id, title, description, event_date, event_time, venue, organizer, contact_name, contact_phone, contact_email, registration_url, thumbnail_url, club_id")
+        .select("id, title, description, event_date, event_time, venue, organizer, contact_name, contact_phone, contact_email, registration_url, registration_deadline, thumbnail_url, club_id")
         .in("club_id", clubIds)
         .order("event_date", { ascending: true, nullsFirst: true })
     : { data: [] }
@@ -143,6 +143,7 @@ export default async function ClubsAdminPage(
         contact_phone: e.contact_phone ?? "",
         contact_email: e.contact_email ?? "",
         registration_url: e.registration_url ?? "",
+        registration_deadline: e.registration_deadline,
         thumbnail_url: e.thumbnail_url,
         club_id: e.club_id,
       }))}
