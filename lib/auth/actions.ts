@@ -82,7 +82,7 @@ export async function signUpAction(formData: FormData): Promise<SignUpResult> {
   // the index is the hard backstop against races.
   const { data: phoneExists } = await supabase.rpc("check_phone_exists", { p_phone: normalizedPhone })
   if (phoneExists) {
-    return { error: "This phone number is already linked to an account. Try signing in.", needsEmailConfirmation: false }
+    return { error: "This phone number is already registered. Please sign in instead.", needsEmailConfirmation: false }
   }
 
   const { data, error } = await supabase.auth.signUp({

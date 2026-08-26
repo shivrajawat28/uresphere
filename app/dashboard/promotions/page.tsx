@@ -20,12 +20,14 @@ export default async function PromotionsPage() {
   const supabase = await createClient()
 
   const [{ data: promotions }, { data: config }] = await Promise.all([
-    supabase
-      .from("promotions")
-      .select("id, title, url, status, fee_status, utr, created_at, reviewed_at, paid_at, user_id")
-      .eq("sphere_id", member.sphereId)
-      .order("created_at", { ascending: false })
-      .limit(200),
+    member.sphereId
+      ? supabase
+          .from("promotions")
+          .select("id, title, url, status, fee_status, utr, created_at, reviewed_at, paid_at, user_id")
+          .eq("sphere_id", member.sphereId)
+          .order("created_at", { ascending: false })
+          .limit(200)
+      : Promise.resolve({ data: [] }),
     supabase.from("platform_config").select("value").eq("key", "promotion_payment").maybeSingle(),
   ])
 

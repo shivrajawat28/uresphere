@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { UreSphereLogo } from "@/components/brand/uresphere-logo"
 import { ArrowLeft, ArrowRight, Loader2, ShieldCheck } from "lucide-react"
+import { toast } from "sonner"
 
 const STEPS = ["identity", "campus", "credentials"] as const
 type Step = (typeof STEPS)[number]
@@ -113,13 +114,25 @@ export default function SignUpPage() {
       const result = await signUpAction(formData)
       submittingRef.current = false
       if (result.error) {
-        // Surface server-side errors field-specifically where we can map them.
+        // Surface server-side errors field-specifically where we can map them,
+        // and force the UI back to the relevant step so the error is actually visible.
         const err = result.error
         const lower = err.toLowerCase()
-        if (lower.includes("phone")) setErrors((e) => ({ ...e, phone: err }))
-        else if (lower.includes("email")) setErrors((e) => ({ ...e, email: err }))
-        else if (lower.includes("password")) setErrors((e) => ({ ...e, password: err }))
-        else setErrors((e) => ({ ...e, email: err }))
+        if (lower.includes("phone")) {
+          setErrors((e) => ({ ...e, phone: err }))
+          setStepIndex(0)
+        } else if (lower.includes("college") || lower.includes("year")) {
+          setErrors((e) => ({ ...e, college: err }))
+          setStepIndex(1)
+        } else if (lower.includes("email")) {
+          setErrors((e) => ({ ...e, email: err }))
+          setStepIndex(2)
+        } else if (lower.includes("password")) {
+          setErrors((e) => ({ ...e, password: err }))
+          setStepIndex(2)
+        } else {
+          toast.error(err)
+        }
         return
       }
       if (result.needsEmailConfirmation) {

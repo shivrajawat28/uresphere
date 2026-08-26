@@ -81,12 +81,12 @@ export default async function SphereAdminPage({ params }: { params: Promise<{ sp
       .order("branch")
       .limit(300),
     supabase
-      .from("units")
+      .from("academic_units")
       .select("id, subject_id, name")
       .eq("sphere_id", sphereId)
       .limit(1000),
     supabase
-      .from("chapters")
+      .from("academic_chapters")
       .select("id, unit_id, name")
       .eq("sphere_id", sphereId)
       .limit(2000),
