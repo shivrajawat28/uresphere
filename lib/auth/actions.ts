@@ -137,6 +137,13 @@ export async function loginAction(formData: FormData): Promise<ActionResult> {
   // to /admin — never to onboarding, regardless of college membership. The role
   // is read from the DB profile (authoritative, server-side), never the client.
   if (signInData?.user) {
+    // Refresh the inactivity timestamp so the server doesn't immediately 
+    // log out a returning user via the 48-hour inactivity check.
+    await supabase
+      .from("profiles")
+      .update({ last_activity_at: new Date().toISOString() })
+      .eq("id", signInData.user.id)
+
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
