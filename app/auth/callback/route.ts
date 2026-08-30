@@ -1,14 +1,8 @@
 import { createClient } from "@/lib/supabase/server"
 import { getSiteUrl } from "@/lib/site-url"
+import { sanitizeRedirectPath } from "@/lib/validation"
 import { type EmailOtpType } from "@supabase/supabase-js"
 import { NextRequest, NextResponse } from "next/server"
-
-function sanitizeRedirectPath(path: string | null): string {
-  if (!path || !path.startsWith("/") || path.startsWith("//")) {
-    return "/dashboard"
-  }
-  return path
-}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl

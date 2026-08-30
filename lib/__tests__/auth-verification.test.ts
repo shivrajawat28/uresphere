@@ -13,14 +13,43 @@ import { createClient } from "@/lib/supabase/server"
 import { GET as callbackGet } from "@/app/auth/callback/route"
 import { GET as confirmGet } from "@/app/auth/confirm/route"
 import { POST as sessionPost } from "@/app/api/auth/session/route"
+import { sanitizeRedirectPath } from "@/lib/validation"
 
 beforeEach(() => {
   vi.clearAllMocks()
 })
 
-describe("Auth Verification Routes", () => {
+describe("Auth Verification Security & Functionality", () => {
+  describe("sanitizeRedirectPath", () => {
+    it("allows valid relative paths", () => {
+      expect(sanitizeRedirectPath("/dashboard")).toBe("/dashboard")
+      expect(sanitizeRedirectPath("/dashboard/academic")).toBe("/dashboard/academic")
+      expect(sanitizeRedirectPath("/settings?tab=profile")).toBe("/settings?tab=profile")
+    })
+
+    it("prevents open redirects via protocol-relative URLs", () => {
+      expect(sanitizeRedirectPath("//evil.com")).toBe("/dashboard")
+      expect(sanitizeRedirectPath("///evil.com")).toBe("/dashboard")
+    })
+
+    it("prevents open redirects via backslashes", () => {
+      expect(sanitizeRedirectPath("/\\evil.com")).toBe("/dashboard")
+      expect(sanitizeRedirectPath("/\\\\evil.com")).toBe("/dashboard")
+    })
+
+    it("prevents open redirects via full URLs", () => {
+      expect(sanitizeRedirectPath("https://evil.com")).toBe("/dashboard")
+      expect(sanitizeRedirectPath("http://evil.com/phish")).toBe("/dashboard")
+      expect(sanitizeRedirectPath("javascript:alert(1)")).toBe("/dashboard")
+    })
+
+    it("prevents CRLF header injection attempts", () => {
+      expect(sanitizeRedirectPath("/dashboard\r\nSet-Cookie:bad=1")).toBe("/dashboard")
+    })
+  })
+
   describe("/auth/callback", () => {
-    it("verifies token_hash and redirects to dashboard on success", async () => {
+    it("verifies token_hash and redirects to sanitized dashboard path on success", async () => {
       const verifyOtp = vi.fn().mockResolvedValue({ data: { user: { id: "u1" } }, error: null })
       vi.mocked(createClient).mockResolvedValue({
         auth: { verifyOtp },
@@ -35,6 +64,19 @@ describe("Auth Verification Routes", () => {
         type: "email",
         token_hash: "th_123",
       })
+    })
+
+    it("sanitizes open redirect attempts in next param", async () => {
+      const verifyOtp = vi.fn().mockResolvedValue({ data: { user: { id: "u1" } }, error: null })
+      vi.mocked(createClient).mockResolvedValue({
+        auth: { verifyOtp },
+      } as never)
+
+      const req = new NextRequest("https://uresphere.in/auth/callback?token_hash=th_123&type=email&next=//evil.com")
+      const res = await callbackGet(req)
+
+      expect(res.status).toBe(307)
+      expect(res.headers.get("location")).toBe("https://uresphere.in/dashboard")
     })
 
     it("verifies token_hash with recovery type and redirects to reset-password", async () => {
@@ -142,6 +184,21 @@ describe("Auth Verification Routes", () => {
       })
     })
 
+    it("sanitizes open redirect attempts in next param", async () => {
+      const verifyOtp = vi.fn().mockResolvedValue({ data: { user: { id: "u1" } }, error: null })
+      vi.mocked(createClient).mockResolvedValue({
+        auth: { verifyOtp },
+      } as never)
+
+      const req = new NextRequest(
+        "https://uresphere.in/auth/confirm?token_hash=th_confirm&type=email&next=https://malicious.site",
+      )
+      const res = await confirmGet(req)
+
+      expect(res.status).toBe(307)
+      expect(res.headers.get("location")).toBe("https://uresphere.in/dashboard")
+    })
+
     it("redirects to error if token_hash is missing", async () => {
       const req = new NextRequest("https://uresphere.in/auth/confirm")
       const res = await confirmGet(req)
@@ -152,7 +209,7 @@ describe("Auth Verification Routes", () => {
   })
 
   describe("/api/auth/session", () => {
-    it("sets session cookies when access_token and refresh_token are provided", async () => {
+    it("sets session cookies when valid tokens are provided from valid origin", async () => {
       const setSession = vi.fn().mockResolvedValue({ data: { user: { id: "u1" } }, error: null })
       vi.mocked(createClient).mockResolvedValue({
         auth: { setSession },
@@ -160,6 +217,9 @@ describe("Auth Verification Routes", () => {
 
       const req = new NextRequest("https://uresphere.in/api/auth/session", {
         method: "POST",
+        headers: {
+          origin: "https://uresphere.in",
+        },
         body: JSON.stringify({ access_token: "at_123", refresh_token: "rt_123" }),
       })
       const res = await sessionPost(req)
@@ -167,22 +227,71 @@ describe("Auth Verification Routes", () => {
 
       expect(res.status).toBe(200)
       expect(data.success).toBe(true)
+      // Confirm tokens/user data are NOT leaked in response
+      expect(data.access_token).toBeUndefined()
+      expect(data.user).toBeUndefined()
       expect(setSession).toHaveBeenCalledWith({
         access_token: "at_123",
         refresh_token: "rt_123",
       })
     })
 
-    it("rejects request if tokens are missing", async () => {
+    it("rejects unauthorized cross-origin requests", async () => {
       const req = new NextRequest("https://uresphere.in/api/auth/session", {
         method: "POST",
-        body: JSON.stringify({}),
+        headers: {
+          origin: "https://evil-attacker.com",
+        },
+        body: JSON.stringify({ access_token: "at_123", refresh_token: "rt_123" }),
+      })
+      const res = await sessionPost(req)
+      expect(res.status).toBe(403)
+      const data = await res.json()
+      expect(data.error).toMatch(/Cross-origin/i)
+    })
+
+    it("rejects request if tokens are missing or invalid type", async () => {
+      const req = new NextRequest("https://uresphere.in/api/auth/session", {
+        method: "POST",
+        body: JSON.stringify({ access_token: 12345 }),
       })
       const res = await sessionPost(req)
       const data = await res.json()
 
       expect(res.status).toBe(400)
-      expect(data.error).toMatch(/Missing access or refresh token/i)
+      expect(data.error).toMatch(/Missing or invalid token parameters/i)
+    })
+
+    it("rejects request if tokens exceed safe size limits", async () => {
+      const req = new NextRequest("https://uresphere.in/api/auth/session", {
+        method: "POST",
+        body: JSON.stringify({ access_token: "a".repeat(10000), refresh_token: "b" }),
+      })
+      const res = await sessionPost(req)
+      const data = await res.json()
+
+      expect(res.status).toBe(400)
+      expect(data.error).toMatch(/Missing or invalid token parameters/i)
+    })
+
+    it("rejects request if Supabase rejects the tokens as forged/expired", async () => {
+      const setSession = vi.fn().mockResolvedValue({
+        data: null,
+        error: { message: "Invalid JWT token signature." },
+      })
+      vi.mocked(createClient).mockResolvedValue({
+        auth: { setSession },
+      } as never)
+
+      const req = new NextRequest("https://uresphere.in/api/auth/session", {
+        method: "POST",
+        body: JSON.stringify({ access_token: "forged_token", refresh_token: "forged_refresh" }),
+      })
+      const res = await sessionPost(req)
+      const data = await res.json()
+
+      expect(res.status).toBe(401)
+      expect(data.error).toBe("Invalid JWT token signature.")
     })
   })
 })

@@ -296,3 +296,25 @@ export function mapAuthError(message: string): string {
   }
   return "Invalid email or password."
 }
+
+/**
+ * Validates and sanitizes a relative redirect path, preventing open redirect vulnerabilities.
+ * Only allows relative paths on the same origin (e.g. "/dashboard").
+ * Rejects protocol-relative URLs ("//evil.com"), backslashes ("/\\evil.com"), and schemes ("https://evil.com").
+ */
+export function sanitizeRedirectPath(path: string | null | undefined, fallback = "/dashboard"): string {
+  if (!path) return fallback
+  const trimmed = path.trim()
+  if (
+    !trimmed.startsWith("/") ||
+    trimmed.startsWith("//") ||
+    trimmed.startsWith("/\\") ||
+    trimmed.includes("://") ||
+    trimmed.includes("\r") ||
+    trimmed.includes("\n")
+  ) {
+    return fallback
+  }
+  return trimmed
+}
+
