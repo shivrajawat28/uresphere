@@ -15,7 +15,7 @@ vi.mock("next/navigation", () => ({
 }))
 
 import { createClient } from "@/lib/supabase/server"
-import { loginAction, resetPasswordAction, signUpAction } from "@/lib/auth/actions"
+import { loginAction, resendVerificationEmailAction, resetPasswordAction, signUpAction } from "@/lib/auth/actions"
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -27,25 +27,24 @@ beforeEach(() => {
 // signUpAction
 // ---------------------------------------------------------------------------
 
-function makeSignupClient(college: { id: string; status: string } | null) {
+function makeSignupClient(college: { id: string; status: string } | null, phoneExists = false) {
   // session: null models email confirmation ENABLED — signUp succeeds but no
   // session is issued, so the action reports needsEmailConfirmation.
   const signUp = vi.fn().mockResolvedValue({ data: { session: null }, error: null })
+  const rpc = vi.fn().mockResolvedValue({ data: phoneExists, error: null })
   const from = vi.fn((table: string) => {
     const select = vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({
-        // profiles.phone lookup (duplicate-phone check) returns no row;
-        // colleges lookup returns the configured college.
         maybeSingle: vi.fn().mockResolvedValue({
-          data: table === "profiles" ? null : college,
+          data: table === "colleges" ? college : null,
           error: null,
         }),
       }),
     })
     return { select }
   })
-  vi.mocked(createClient).mockReturnValue({ from, auth: { signUp } } as never)
-  return { signUp }
+  vi.mocked(createClient).mockReturnValue({ from, auth: { signUp }, rpc } as never)
+  return { signUp, rpc }
 }
 
 function validSignupFormData(collegeId = "c1"): FormData {
@@ -83,22 +82,10 @@ describe("signUpAction", () => {
   })
 
   it("rejects a phone number that is already linked to an account (one phone = one account)", async () => {
-    const signUp = vi.fn().mockResolvedValue({ data: { session: null }, error: null })
-    const from = vi.fn((table: string) => {
-      const select = vi.fn().mockReturnValue({
-        eq: vi.fn().mockReturnValue({
-          maybeSingle: vi.fn().mockResolvedValue({
-            data: table === "profiles" ? { id: "existing-user" } : { id: "c1", status: "active" },
-            error: null,
-          }),
-        }),
-      })
-      return { select }
-    })
-    vi.mocked(createClient).mockReturnValue({ from, auth: { signUp } } as never)
+    const { signUp } = makeSignupClient({ id: "c1", status: "active" }, true)
 
     const result = await signUpAction(validSignupFormData("c1"))
-    expect(result.error).toMatch(/already linked to an account/i)
+    expect(result.error).toMatch(/already registered/i)
     expect(signUp).not.toHaveBeenCalled()
   })
 
@@ -140,7 +127,10 @@ function makeLoginClient(opts: {
       }))
       return { eq }
     })
-    return { select }
+    const update = vi.fn(() => ({
+      eq: vi.fn().mockResolvedValue({ error: null }),
+    }))
+    return { select, update }
   })
   vi.mocked(createClient).mockReturnValue({ from, auth: { signInWithPassword } } as never)
   return { signInWithPassword, from }
@@ -239,3 +229,45 @@ describe("resetPasswordAction", () => {
     expect(updateUser).toHaveBeenCalledTimes(1)
   })
 })
+
+// ---------------------------------------------------------------------------
+// resendVerificationEmailAction
+// ---------------------------------------------------------------------------
+
+describe("resendVerificationEmailAction", () => {
+  it("rejects an empty email", async () => {
+    const fd = new FormData()
+    fd.set("email", "")
+    const result = await resendVerificationEmailAction(fd)
+    expect(result.error).toMatch(/valid email/i)
+  })
+
+  it("rejects an invalid email format", async () => {
+    const fd = new FormData()
+    fd.set("email", "not-an-email")
+    const result = await resendVerificationEmailAction(fd)
+    expect(result.error).toMatch(/valid email/i)
+  })
+
+  it("calls supabase.auth.resend with normalized email and correct options", async () => {
+    const resend = vi.fn().mockResolvedValue({ data: {}, error: null })
+    vi.mocked(createClient).mockReturnValue({ auth: { resend } } as never)
+
+    const fd = new FormData()
+    fd.set("email", "  TestUser@Example.COM ")
+    const result = await resendVerificationEmailAction(fd)
+
+    expect(result.error).toBeNull()
+    expect(resend).toHaveBeenCalledTimes(1)
+    expect(resend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "signup",
+        email: "testuser@example.com",
+        options: expect.objectContaining({
+          emailRedirectTo: expect.stringContaining("/auth/callback"),
+        }),
+      }),
+    )
+  })
+})
+

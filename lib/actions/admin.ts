@@ -1101,6 +1101,49 @@ export async function deleteClubEventAction(eventId: string): Promise<ActionResu
   return { error: null }
 }
 
+export async function attachEventToClubAction(eventId: string, clubId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const { error } = await supabase.rpc("link_event_to_club", {
+    p_event_id: eventId,
+    p_club_id: clubId,
+  })
+
+  if (error) {
+    if (error.message.includes("Unauthorized")) return { error: "You don't have permission to attach this event." }
+    return { error: "Couldn't attach the event." }
+  }
+
+  // Find the sphere to revalidate
+  const { data: club } = await supabase.from("clubs").select("sphere_id").eq("id", clubId).maybeSingle()
+  if (club) {
+    for (const p of spherePaths(club.sphere_id)) revalidatePath(p)
+  }
+  revalidatePath("/dashboard/clubs")
+  return { error: null }
+}
+
+export async function detachEventFromClubAction(eventId: string, clubId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const { error } = await supabase.rpc("unlink_event_from_club", {
+    p_event_id: eventId,
+    p_club_id: clubId,
+  })
+
+  if (error) {
+    if (error.message.includes("Unauthorized")) return { error: "You don't have permission to detach this event." }
+    return { error: "Couldn't detach the event." }
+  }
+
+  const { data: club } = await supabase.from("clubs").select("sphere_id").eq("id", clubId).maybeSingle()
+  if (club) {
+    for (const p of spherePaths(club.sphere_id)) revalidatePath(p)
+  }
+  revalidatePath("/dashboard/clubs")
+  return { error: null }
+}
+
 // ---------------------------------------------------------------------------
 // Event / Club Event Registration
 // ---------------------------------------------------------------------------

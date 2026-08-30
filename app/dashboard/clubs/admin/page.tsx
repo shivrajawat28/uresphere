@@ -96,13 +96,63 @@ export default async function ClubsAdminPage(
     : { data: [] }
 
   // Fetch club events for all clubs
-  const { data: clubEvents } = clubIds.length
+  const { data: clubEventsData } = clubIds.length
     ? await supabase
         .from("club_events")
         .select("id, title, description, event_date, event_time, venue, organizer, contact_name, contact_phone, contact_email, registration_url, registration_deadline, thumbnail_url, club_id")
         .in("club_id", clubIds)
         .order("event_date", { ascending: true, nullsFirst: true })
     : { data: [] }
+
+  // Fetch attached main events for these clubs
+  const { data: attachedEventsData } = clubIds.length
+    ? await supabase
+        .from("events")
+        .select("id, title, description, event_date, event_time, venue, organizer, contact_name, contact_phone, contact_email, registration_url, registration_deadline, image_url, club_id")
+        .in("club_id", clubIds)
+        .order("event_date", { ascending: true, nullsFirst: true })
+    : { data: [] }
+
+  type RawClubEvent = {
+    id: string
+    title: string
+    description: string | null
+    event_date: string | null
+    event_time: string | null
+    venue: string | null
+    organizer: string | null
+    contact_name: string | null
+    contact_phone: string | null
+    contact_email: string | null
+    registration_url: string | null
+    registration_deadline: string | null
+    thumbnail_url: string | null
+    club_id: string | null
+    is_attached_event?: boolean
+  }
+
+  // Format attached events to match the club_events structure, adding a flag to identify them
+  const formattedAttachedEvents: RawClubEvent[] = (attachedEventsData ?? []).map((e) => ({
+    ...e,
+    thumbnail_url: e.image_url,
+    is_attached_event: true,
+  }))
+
+  const clubEvents: RawClubEvent[] = [...((clubEventsData ?? []) as RawClubEvent[]), ...formattedAttachedEvents].sort((a, b) => {
+    if (!a.event_date) return -1
+    if (!b.event_date) return 1
+    return new Date(a.event_date).getTime() - new Date(b.event_date).getTime()
+  })
+
+  // Fetch eligible unlinked events for the sphere to allow attaching
+  const today = new Date().toISOString().slice(0, 10)
+  const { data: eligibleEventsData } = await supabase
+    .from("events")
+    .select("id, title, event_date, venue")
+    .eq("sphere_id", activeWorkspace.sphereId)
+    .is("club_id", null)
+    .gte("event_date", today)
+    .order("event_date", { ascending: true })
 
   return (
     <ClubsAdminClient
@@ -122,6 +172,7 @@ export default async function ClubsAdminPage(
       }))}
       activities={(activities ?? []).map((a) => ({
         id: a.id,
+        club_id: a.club_id,
         title: a.title,
         description: a.description ?? "",
         category: a.category ?? "other",
@@ -129,10 +180,10 @@ export default async function ClubsAdminPage(
         venue: a.venue ?? "",
         organizer: a.organizer ?? "",
         thumbnail_url: a.thumbnail_url,
-        club_id: a.club_id,
       }))}
-      clubEvents={(clubEvents ?? []).map((e) => ({
+      clubEvents={clubEvents.map((e) => ({
         id: e.id,
+        club_id: e.club_id ?? "",
         title: e.title,
         description: e.description ?? "",
         event_date: e.event_date,
@@ -145,8 +196,9 @@ export default async function ClubsAdminPage(
         registration_url: e.registration_url ?? "",
         registration_deadline: e.registration_deadline,
         thumbnail_url: e.thumbnail_url,
-        club_id: e.club_id,
+        is_attached_event: e.is_attached_event ?? false,
       }))}
+      eligibleEvents={eligibleEventsData ?? []}
       initialExpandedClub={searchParams.clubId}
     />
   )

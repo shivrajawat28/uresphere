@@ -13,7 +13,10 @@ function getRedirectUrl() {
   // route, not the landing page.
   const appUrl = process.env.NEXT_PUBLIC_APP_URL
   if (appUrl) {
-    const base = appUrl.endsWith("/") ? appUrl.slice(0, -1) : appUrl
+    let base = appUrl.endsWith("/") ? appUrl.slice(0, -1) : appUrl
+    if (base.includes("www.uresphere.in")) {
+      base = base.replace("://www.uresphere.in", "://uresphere.in")
+    }
     return `${base}/auth/callback`
   }
   // Dev override: allows a tunneled/local Supabase project to receive
@@ -213,6 +216,32 @@ export async function resetPasswordAction(formData: FormData): Promise<ActionRes
     if (msg.includes("session") || msg.includes("expired") || msg.includes("user")) {
       return { error: "This password reset link is invalid or has expired. Please request a new one." }
     }
+    return { error: mapAuthError(error.message) }
+  }
+
+  return { error: null }
+}
+
+export async function resendVerificationEmailAction(formData: FormData): Promise<ActionResult> {
+  const emailInput = String(formData.get("email") || "").trim()
+  const email = normalizeEmail(emailInput)
+
+  if (!email || !isValidEmail(email)) {
+    return { error: "Please enter a valid email address." }
+  }
+
+  const supabase = await createClient()
+  const emailRedirectTo = getRedirectUrl()
+
+  const { error } = await supabase.auth.resend({
+    type: "signup",
+    email,
+    options: {
+      emailRedirectTo,
+    },
+  })
+
+  if (error) {
     return { error: mapAuthError(error.message) }
   }
 

@@ -13,6 +13,7 @@ import {
   createClubAction, deleteClubAction, updateClubAction,
   createClubActivityAction, deleteClubActivityAction,
   createClubEventAction, deleteClubEventAction, updateClubEventAction,
+  attachEventToClubAction, detachEventFromClubAction,
   getEventRegistrations, getEventGalleryItems,
 } from "@/lib/actions/admin"
 import { EventGalleryManager, type GalleryItem } from "@/components/event-gallery-manager"
@@ -41,7 +42,7 @@ type ActivityRow = {
   club_id: string
 }
 
-type ClubEventRow = {
+export type ClubEventRow = {
   id: string
   title: string
   description: string
@@ -57,6 +58,14 @@ type ClubEventRow = {
   thumbnail_url: string | null
   registration_count?: number
   club_id: string
+  is_attached_event?: boolean
+}
+
+type EligibleEventRow = {
+  id: string
+  title: string
+  event_date: string | null
+  venue: string | null
 }
 
 export function ClubsAdminClient({
@@ -66,6 +75,7 @@ export function ClubsAdminClient({
   isClubAdmin = false,
   activities = [],
   clubEvents = [],
+  eligibleEvents = [],
   initialExpandedClub,
 }: {
   sphereId: string
@@ -74,6 +84,7 @@ export function ClubsAdminClient({
   isClubAdmin?: boolean
   activities?: ActivityRow[]
   clubEvents?: ClubEventRow[]
+  eligibleEvents?: EligibleEventRow[]
   initialExpandedClub?: string
 }) {
   const [isPending, startTransition] = useTransition()
@@ -82,6 +93,7 @@ export function ClubsAdminClient({
   const [expandedClub, setExpandedClub] = useState<string | null>(initialExpandedClub ?? null)
   const [showAddActivity, setShowAddActivity] = useState(false)
   const [showAddEvent, setShowAddEvent] = useState(false)
+  const [showAttachEvent, setShowAttachEvent] = useState(false)
   const [editingEventId, setEditingEventId] = useState<string | null>(null)
   const [galleryTarget, setGalleryTarget] = useState<{ eventId: string; eventTitle: string; source: "club" | "activity" } | null>(null)
   const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([])
@@ -236,10 +248,16 @@ export function ClubsAdminClient({
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <h3 className="text-sm font-medium text-foreground">Club Events</h3>
-                        <Button size="sm" variant="ghost" className="gap-1 text-xs"
-                          onClick={() => { setShowAddEvent(true); setEditingEventId(null); setExpandedClub(club.id) }}>
-                          <Plus className="size-3" />Add Event
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button size="sm" variant="outline" className="gap-1 text-xs"
+                            onClick={() => { setShowAttachEvent(true); setExpandedClub(club.id) }}>
+                            <Plus className="size-3" />Attach Existing
+                          </Button>
+                          <Button size="sm" variant="ghost" className="gap-1 text-xs"
+                            onClick={() => { setShowAddEvent(true); setEditingEventId(null); setExpandedClub(club.id) }}>
+                            <Plus className="size-3" />Add Event
+                          </Button>
+                        </div>
                       </div>
                       {(() => {
                         const clubEvts = clubEvents.filter((e) => e.club_id === club.id)
@@ -249,30 +267,45 @@ export function ClubsAdminClient({
                         <div className="space-y-2">
                           {clubEvts.map((e) => (
                             <div key={e.id} className="flex items-center justify-between rounded-md border border-border/60 bg-secondary/20 p-2">
-                              <div className="min-w-0">
-                                <p className="text-xs font-medium text-foreground truncate">{e.title}</p>
-                                <p className="text-[10px] text-muted-foreground">
-                                  {e.event_date || "Coming Soon"} {e.venue ? `· ${e.venue}` : ""}
-                                  {typeof e.registration_count === "number" ? ` · ${e.registration_count} registrations` : ""}
-                                </p>
+                              <div className="min-w-0 flex items-center gap-2">
+                                <div>
+                                  <p className="text-xs font-medium text-foreground truncate">{e.title}</p>
+                                  <p className="text-[10px] text-muted-foreground">
+                                    {e.event_date || "Coming Soon"} {e.venue ? `· ${e.venue}` : ""}
+                                    {typeof e.registration_count === "number" ? ` · ${e.registration_count} registrations` : ""}
+                                  </p>
+                                </div>
+                                {e.is_attached_event && (
+                                  <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">Attached</span>
+                                )}
                               </div>
                               <div className="flex gap-1">
-                                <Button size="icon-sm" variant="ghost" disabled={isPending}
-                                  onClick={() => loadRegistrations(e.id, e.title)}>
-                                  <Users className="size-3 text-muted-foreground" />
-                                </Button>
-                                <Button size="icon-sm" variant="ghost" disabled={isPending}
-                                  onClick={() => { setEditingEventId(e.id); setShowAddEvent(true); setExpandedClub(club.id) }}>
-                                  <Pencil className="size-3 text-muted-foreground" />
-                                </Button>
-                                <Button size="icon-sm" variant="ghost" disabled={isPending}
-                                  onClick={() => loadGallery(e.id, e.title, "club")}>
-                                  <ImageIcon className="size-3 text-muted-foreground" />
-                                </Button>
-                                <Button size="icon-sm" variant="ghost" disabled={isPending}
-                                  onClick={() => { if (confirm("Delete this event?")) run(() => deleteClubEventAction(e.id), "Event deleted") }}>
-                                  <Trash2 className="size-3 text-destructive" />
-                                </Button>
+                                {!e.is_attached_event && (
+                                  <>
+                                    <Button size="icon-sm" variant="ghost" disabled={isPending}
+                                      onClick={() => loadRegistrations(e.id, e.title)}>
+                                      <Users className="size-3 text-muted-foreground" />
+                                    </Button>
+                                    <Button size="icon-sm" variant="ghost" disabled={isPending}
+                                      onClick={() => { setEditingEventId(e.id); setShowAddEvent(true); setExpandedClub(club.id) }}>
+                                      <Pencil className="size-3 text-muted-foreground" />
+                                    </Button>
+                                    <Button size="icon-sm" variant="ghost" disabled={isPending}
+                                      onClick={() => loadGallery(e.id, e.title, "club")}>
+                                      <ImageIcon className="size-3 text-muted-foreground" />
+                                    </Button>
+                                    <Button size="icon-sm" variant="ghost" disabled={isPending}
+                                      onClick={() => { if (confirm("Delete this event?")) run(() => deleteClubEventAction(e.id), "Event deleted") }}>
+                                      <Trash2 className="size-3 text-destructive" />
+                                    </Button>
+                                  </>
+                                )}
+                                {e.is_attached_event && (
+                                  <Button size="sm" variant="ghost" disabled={isPending} className="text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                    onClick={() => { if (confirm("Detach this event?")) run(() => detachEventFromClubAction(e.id, club.id), "Event detached") }}>
+                                    Detach
+                                  </Button>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -300,6 +333,46 @@ export function ClubsAdminClient({
                         onClose={() => { setShowAddEvent(false); setEditingEventId(null) }}
                         onSubmit={(fd) => run(async () => { const r = editingEventId ? await updateClubEventAction(fd) : await createClubEventAction(fd); if (!r.error) { setShowAddEvent(false); setEditingEventId(null) }; return r }, editingEventId ? "Event updated" : "Event created")}
                       />
+                    )}
+
+                    {/* Attach Existing Event Form */}
+                    {showAttachEvent && expandedClub === club.id && (
+                      <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
+                        <p className="mb-3 text-xs font-medium text-foreground">Attach College Event</p>
+                        {eligibleEvents.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">No unlinked upcoming college events found.</p>
+                        ) : (
+                          <form onSubmit={(e) => {
+                            e.preventDefault()
+                            const fd = new FormData(e.currentTarget)
+                            const eventId = String(fd.get("eventId") ?? "")
+                            if (!eventId) return
+                            run(async () => {
+                              const r = await attachEventToClubAction(eventId, club.id)
+                              if (!r.error) setShowAttachEvent(false)
+                              return r
+                            }, "Event attached successfully")
+                          }}>
+                            <div className="space-y-3">
+                              <select name="eventId" required className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm">
+                                <option value="" disabled selected>Select an event to attach...</option>
+                                {eligibleEvents.map(evt => (
+                                  <option key={evt.id} value={evt.id}>
+                                    {evt.title} {evt.event_date ? `(${evt.event_date})` : ""}
+                                  </option>
+                                ))}
+                              </select>
+                              <div className="flex gap-2">
+                                <Button type="submit" size="sm" disabled={isPending} className="gap-2">
+                                  {isPending && <Loader2 className="size-3.5 animate-spin" />}
+                                  Attach Event
+                                </Button>
+                                <Button type="button" size="sm" variant="ghost" onClick={() => setShowAttachEvent(false)}>Cancel</Button>
+                              </div>
+                            </div>
+                          </form>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}

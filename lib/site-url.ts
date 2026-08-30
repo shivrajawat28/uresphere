@@ -25,7 +25,7 @@
  * leak into canonical output.
  */
 
-const PRODUCTION_DOMAIN = "www.uresphere.in"
+const PRODUCTION_DOMAIN = "uresphere.in"
 
 /** Returns a normalized `scheme://host[:port]` or null for invalid/unsupported input. */
 export function cleanOrigin(raw: string | null | undefined): string | null {
@@ -33,7 +33,11 @@ export function cleanOrigin(raw: string | null | undefined): string | null {
   try {
     const url = new URL(raw)
     if (url.protocol !== "http:" && url.protocol !== "https:") return null
-    return url.origin.replace(/\/+$/, "")
+    let origin = url.origin.replace(/\/+$/, "")
+    if (origin === "https://www.uresphere.in" || origin === "http://www.uresphere.in") {
+      origin = "https://uresphere.in"
+    }
+    return origin
   } catch {
     return null
   }
