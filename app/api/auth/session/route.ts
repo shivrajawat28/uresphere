@@ -46,13 +46,20 @@ export async function POST(request: NextRequest) {
     // setSession cryptographically verifies the JWT signature and refresh token validity.
     // An arbitrary token cannot create a session; Supabase will reject it.
     const supabase = await createClient()
-    const { error } = await supabase.auth.setSession({
+    const { data: sessionData, error } = await supabase.auth.setSession({
       access_token: accessToken.trim(),
       refresh_token: refreshToken.trim(),
     })
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 401 })
+    }
+
+    if (sessionData?.user && typeof supabase.from === "function") {
+      await supabase
+        .from("profiles")
+        .update({ last_activity_at: new Date().toISOString() })
+        .eq("id", sessionData.user.id)
     }
 
     // 5. Minimal success response — never expose tokens, user metadata, or auth secrets

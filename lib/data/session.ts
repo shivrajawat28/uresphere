@@ -48,7 +48,7 @@ export async function requireMember(): Promise<CurrentMember> {
     redirect("/auth/login")
   }
 
-  const [{ data: profile }, { data: membership }] = await Promise.all([
+  const [{ data: profile, error: profileError }, { data: membership, error: membershipError }] = await Promise.all([
     supabase
       .from("profiles")
       .select("role, account_status, real_name, last_activity_at")
@@ -60,6 +60,10 @@ export async function requireMember(): Promise<CurrentMember> {
       .eq("user_id", user.id)
       .maybeSingle(),
   ])
+
+  if (profileError || membershipError) {
+    console.error("requireMember database error:", profileError || membershipError)
+  }
 
   // No profile row at all: the signup trigger should always create one.
   if (!profile) {
@@ -77,13 +81,23 @@ export async function requireMember(): Promise<CurrentMember> {
   // session here guarantees an inactive user can't be let back into protected
   // areas — including by hand-editing a URL or replaying an old session.
   if (isInactive(profile.last_activity_at)) {
-    try {
-      await supabase.auth.signOut()
-    } catch {
-      // Best-effort: even if the network revoke fails, the user must never
-      // be let into a protected area with an expired inactivity window.
+    const lastSignInAt = user.last_sign_in_at
+    if (lastSignInAt && !isInactive(lastSignInAt)) {
+      // User just authenticated (e.g. loginAction, PKCE, email verify) within
+      // the last 48 hours. Refresh their activity timestamp and let them in.
+      await supabase
+        .from("profiles")
+        .update({ last_activity_at: new Date().toISOString() })
+        .eq("id", user.id)
+    } else {
+      try {
+        await supabase.auth.signOut()
+      } catch {
+        // Best-effort: even if the network revoke fails, the user must never
+        // be let into a protected area with an expired inactivity window.
+      }
+      redirect("/auth/login")
     }
-    redirect("/auth/login")
   }
 
   // Super admins are platform-global and must never be blocked by onboarding.

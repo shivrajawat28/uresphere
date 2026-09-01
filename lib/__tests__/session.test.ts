@@ -23,13 +23,15 @@ type MockMembership = { sphere_id: string; anonymous_handle: string; avatar_url:
 type MockProfile = { role: string; account_status: string; last_activity_at?: string | null }
 
 function mockSessionClient(opts: {
-  user?: { id: string; email: string } | null
+  user?: { id: string; email: string; last_sign_in_at?: string } | null
   profile?: MockProfile | null
   membership?: MockMembership | null
 }) {
   const user = opts.user === undefined ? { id: "u1", email: "admin@uresphere.app" } : opts.user
   const getUser = vi.fn().mockResolvedValue({ data: { user }, error: null })
   const signOut = vi.fn().mockResolvedValue({ error: null })
+  const updateEq = vi.fn().mockResolvedValue({ data: null, error: null })
+  const update = vi.fn().mockReturnValue({ eq: updateEq })
   const from = vi.fn((table: string) => ({
     select: vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({
@@ -39,9 +41,10 @@ function mockSessionClient(opts: {
         }),
       }),
     }),
+    update,
   }))
   vi.mocked(createClient).mockReturnValue({ auth: { getUser, signOut }, from } as never)
-  return { signOut }
+  return { signOut, update, updateEq }
 }
 
 beforeEach(() => {
@@ -107,12 +110,28 @@ describe("requireMember", () => {
   it("signs out + redirects to login when inactive for 48+ hours", async () => {
     const stale = new Date(Date.now() - 49 * 60 * 60 * 1000).toISOString()
     const { signOut } = mockSessionClient({
+      user: { id: "u1", email: "admin@uresphere.app", last_sign_in_at: stale },
       profile: { role: "user", account_status: "active", last_activity_at: stale },
       membership: { sphere_id: "s1", anonymous_handle: "@Gone1", avatar_url: null },
     })
     await expect(requireMember()).rejects.toThrow(/NEXT_REDIRECT/)
     expect(signOut).toHaveBeenCalledTimes(1)
     expect(redirectMock).toHaveBeenCalledWith("/auth/login")
+  })
+
+  it("allows a returning user with stale last_activity_at if last_sign_in_at is fresh", async () => {
+    const stale = new Date(Date.now() - 49 * 60 * 60 * 1000).toISOString()
+    const freshSignIn = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+    const { signOut, update } = mockSessionClient({
+      user: { id: "u1", email: "admin@uresphere.app", last_sign_in_at: freshSignIn },
+      profile: { role: "user", account_status: "active", last_activity_at: stale },
+      membership: { sphere_id: "s1", anonymous_handle: "@Returned1", avatar_url: null },
+    })
+    const member = await requireMember()
+    expect(member.role).toBe("user")
+    expect(signOut).not.toHaveBeenCalled()
+    expect(redirectMock).not.toHaveBeenCalled()
+    expect(update).toHaveBeenCalledTimes(1)
   })
 
   it("sends suspended accounts to /auth/suspended — even super admins", async () => {

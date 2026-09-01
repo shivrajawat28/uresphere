@@ -28,12 +28,19 @@ export async function GET(request: NextRequest) {
   // 2. Direct token_hash verification (Supabase SSR recommended email flow)
   if (token_hash) {
     const otpType = (type as EmailOtpType | null) ?? (isRecovery ? "recovery" : "email")
-    const { error } = await supabase.auth.verifyOtp({
+    const { data: otpData, error } = await supabase.auth.verifyOtp({
       type: otpType,
       token_hash,
     })
 
     if (!error) {
+      const user = otpData?.user
+      if (user && typeof supabase.from === "function") {
+        await supabase
+          .from("profiles")
+          .update({ last_activity_at: new Date().toISOString() })
+          .eq("id", user.id)
+      }
       if (isRecovery) {
         return NextResponse.redirect(`${baseUrl}/auth/reset-password`)
       }
@@ -47,8 +54,15 @@ export async function GET(request: NextRequest) {
 
   // 3. PKCE code exchange
   if (code) {
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    const { data: codeData, error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
+      const user = codeData?.user
+      if (user && typeof supabase.from === "function") {
+        await supabase
+          .from("profiles")
+          .update({ last_activity_at: new Date().toISOString() })
+          .eq("id", user.id)
+      }
       if (isRecovery) {
         return NextResponse.redirect(`${baseUrl}/auth/reset-password`)
       }

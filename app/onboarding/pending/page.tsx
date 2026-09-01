@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { logoutAction } from "@/lib/auth/actions"
 
 export default function OnboardingPendingPage() {
   return (
@@ -16,6 +17,15 @@ export default function OnboardingPendingPage() {
         <Button asChild className="w-full">
           <Link href="/dashboard">Refresh</Link>
         </Button>
+
+        <form action={logoutAction} className="mt-4">
+          <button
+            type="submit"
+            className="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
+          >
+            Sign in with a different account
+          </button>
+        </form>
       </div>
     </main>
   )

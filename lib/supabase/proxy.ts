@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
+import { sanitizeRedirectPath } from "@/lib/validation"
 
 const PROTECTED_PREFIXES = ["/dashboard", "/chat", "/marketplace", "/admin", "/onboarding", "/settings"]
 
@@ -48,6 +49,17 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone()
     url.pathname = "/auth/login"
     url.searchParams.set("next", path)
+    return NextResponse.redirect(url)
+  }
+
+  // Already-authenticated user visiting login page should go straight to dashboard
+  if (path === "/auth/login" && user) {
+    const rawNext = request.nextUrl.searchParams.get("next")
+    const next = rawNext ? sanitizeRedirectPath(rawNext, "/dashboard") : "/dashboard"
+    const target = next === "/auth/login" ? "/dashboard" : next
+    const url = request.nextUrl.clone()
+    url.pathname = target
+    url.search = ""
     return NextResponse.redirect(url)
   }
 
